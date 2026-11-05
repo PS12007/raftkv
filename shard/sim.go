@@ -586,10 +586,10 @@ func NewWorld(cfg SimConfig) *World {
 	return w
 }
 
-func (w *World) adminOp(op CtrlOp, then func()) {
+func (w *World) adminOp(op CtrlOp, then func()) bool {
 	a := w.admin
 	if a.busy {
-		return
+		return false
 	}
 	a.busy = true
 	a.seq++
@@ -602,11 +602,13 @@ func (w *World) adminOp(op CtrlOp, then func()) {
 			then()
 		}
 	})
+	return true
 }
 
 func (w *World) join(gid int) {
-	w.joined[gid] = true
-	w.adminOp(CtrlOp{Type: "join", Servers: map[int][]uint64{gid: w.groups[gid]}}, nil)
+	if w.adminOp(CtrlOp{Type: "join", Servers: map[int][]uint64{gid: w.groups[gid]}}, nil) {
+		w.joined[gid] = true
+	}
 }
 
 func (w *World) nemesis() {
@@ -671,8 +673,9 @@ func (w *World) reconfigurer() {
 				w.join(out[w.rng.Intn(len(out))])
 			case x == 1 && len(in) > 1:
 				g := in[w.rng.Intn(len(in))]
-				w.joined[g] = false
-				w.adminOp(CtrlOp{Type: "leave", GIDs: []int{g}}, nil)
+				if w.adminOp(CtrlOp{Type: "leave", GIDs: []int{g}}, nil) {
+					w.joined[g] = false
+				}
 			case len(in) > 0:
 				w.adminOp(CtrlOp{Type: "move", Shard: w.rng.Intn(NShards), GID: in[w.rng.Intn(len(in))]}, nil)
 			}
