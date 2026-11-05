@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="762" height="366" viewBox="0 0 762 366" role="img" aria-label="go test ./sim · the simulator catching a planted bug">
+<title>go test ./sim · the simulator catching a planted bug</title>
+<rect width="762" height="366" rx="10" fill="#15181c" stroke="#2a3038"/>
+<path d="M0 10a10 10 0 0 1 10-10h742a10 10 0 0 1 10 10v18H0z" fill="#1d2126"/>
+<text x="20" y="19" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="11.5" fill="#8c95a1">go test ./sim · the simulator catching a planted bug</text>
+<rect width="0" height="0"><animate id="clk" attributeName="x" from="0" to="0" dur="18.91s" begin="0s;clk.end"/></rect>
+<g opacity="0"><set attributeName="opacity" to="1" begin="clk.begin+0.60s" dur="18.31s"/>
+<clipPath id="c0"><rect x="20" y="30" height="19" width="0"><animate attributeName="width" values="0.0;7.9;15.8;23.7;31.6;39.5;47.3;55.2;63.1;71.0;78.9;86.8;94.7;102.6;110.5;118.4;126.3;134.1;142.0;149.9;157.8;165.7;173.6;181.5;189.4;197.3;205.2;213.1;220.9;228.8;236.7;244.6;252.5;260.4;268.3;276.2;284.1;292.0;299.9;307.7;315.6;323.5;331.4;339.3;347.2;355.1;363.0;370.9;378.8;386.6" calcMode="discrete" begin="clk.begin+0.60s" dur="1.65s" fill="freeze"/></rect></clipPath>
+<text x="20" y="44" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="13" fill="#d6dbe1" xml:space="preserve" clip-path="url(#c0)"><tspan fill="#6fcf97">$ </tspan>go test ./sim -run TestRandomized -seeds=400 -v</text>
+<rect y="32" width="7.5" height="15" fill="#6fcf97" opacity="0"><animate attributeName="x" values="20.0;27.9;35.8;43.7;51.6;59.5;67.3;75.2;83.1;91.0;98.9;106.8;114.7;122.6;130.5;138.4;146.3;154.1;162.0;169.9;177.8;185.7;193.6;201.5;209.4;217.3;225.2;233.1;240.9;248.8;256.7;264.6;272.5;280.4;288.3;296.2;304.1;312.0;319.9;327.7;335.6;343.5;351.4;359.3;367.2;375.1;383.0;390.9;398.8;406.6" calcMode="discrete" begin="clk.begin+0.60s" dur="1.65s" fill="freeze"/><set attributeName="opacity" to="0.85" begin="clk.begin+0.60s" dur="2.00s"/></rect>
+</g>
+<g opacity="0"><set attributeName="opacity" to="1" begin="clk.begin+2.60s" dur="16.31s"/>
+<text x="20" y="63" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="13" fill="#d6dbe1" xml:space="preserve">    400 seeds: 577357 ops, 4766 elections, 5585 crashes, 3604 partitions,</text>
+</g>
+<g opacity="0"><set attributeName="opacity" to="1" begin="clk.begin+2.72s" dur="16.19s"/>
+<text x="20" y="82" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="13" fill="#d6dbe1" xml:space="preserve">               20419 snapshots (10890 sent), +368/-407 servers, 133428 dropped,</text>
+</g>
+<g opacity="0"><set attributeName="opacity" to="1" begin="clk.begin+2.84s" dur="16.07s"/>
+<text x="20" y="101" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="13" fill="#d6dbe1" xml:space="preserve">               18347 duplicated msgs</text>
+</g>
+<g opacity="0"><set attributeName="opacity" to="1" begin="clk.begin+2.96s" dur="15.95s"/>
+<text x="20" y="120" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="13" fill="#d6dbe1" xml:space="preserve">--- PASS: TestRandomized (38.77s)</text>
+</g>
+<g opacity="0"><set attributeName="opacity" to="1" begin="clk.begin+3.08s" dur="15.83s"/>
+<clipPath id="c5"><rect x="20" y="125" height="19" width="0"><animate attributeName="width" values="0.0;7.9;15.8;23.6;31.5;39.4;47.3;55.2;63.1;70.9;78.8;86.7;94.6;102.5;110.3;118.2;126.1;134.0;141.9;149.8;157.6;165.5;173.4;181.3;189.2;197.0;204.9;212.8;220.7;228.6;236.5;244.3;252.2;260.1;268.0;275.9;283.7;291.6;299.5;307.4;315.3;323.2;331.0;338.9;346.8;354.7;362.6;370.4;378.3;386.2;394.1;402.0;409.9;417.7;425.6;433.5;441.4;449.3;457.1;465.0;472.9;480.8;488.7;496.5" calcMode="discrete" begin="clk.begin+3.08s" dur="2.14s" fill="freeze"/></rect></clipPath>
+<text x="20" y="139" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="13" fill="#7d8794" xml:space="preserve" clip-path="url(#c5)"># now plant a bug: let the leader answer reads without checking</text>
+<rect y="127" width="7.5" height="15" fill="#6fcf97" opacity="0"><animate attributeName="x" values="20.0;27.9;35.8;43.6;51.5;59.4;67.3;75.2;83.1;90.9;98.8;106.7;114.6;122.5;130.3;138.2;146.1;154.0;161.9;169.8;177.6;185.5;193.4;201.3;209.2;217.0;224.9;232.8;240.7;248.6;256.5;264.3;272.2;280.1;288.0;295.9;303.7;311.6;319.5;327.4;335.3;343.2;351.0;358.9;366.8;374.7;382.6;390.4;398.3;406.2;414.1;422.0;429.9;437.7;445.6;453.5;461.4;469.3;477.1;485.0;492.9;500.8;508.7;516.5" calcMode="discrete" begin="clk.begin+3.08s" dur="2.14s" fill="freeze"/><set attributeName="opacity" to="0.85" begin="clk.begin+3.08s" dur="2.39s"/></rect>
+</g>
+<g opacity="0"><set attributeName="opacity" to="1" begin="clk.begin+5.46s" dur="13.45s"/>
+<clipPath id="c6"><rect x="20" y="144" height="19" width="0"><animate attributeName="width" values="0.0;7.9;15.8;23.7;31.6;39.5;47.5;55.4;63.3;71.2;79.1;87.0;94.9;102.8;110.7;118.6;126.5;134.4;142.4;150.3;158.2;166.1;174.0;181.9;189.8;197.7;205.6;213.5;221.4;229.4;237.3;245.2;253.1;261.0;268.9" calcMode="discrete" begin="clk.begin+5.46s" dur="1.12s" fill="freeze"/></rect></clipPath>
+<text x="20" y="158" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="13" fill="#7d8794" xml:space="preserve" clip-path="url(#c6)"># that a majority still follows it</text>
+<rect y="146" width="7.5" height="15" fill="#6fcf97" opacity="0"><animate attributeName="x" values="20.0;27.9;35.8;43.7;51.6;59.5;67.5;75.4;83.3;91.2;99.1;107.0;114.9;122.8;130.7;138.6;146.5;154.4;162.4;170.3;178.2;186.1;194.0;201.9;209.8;217.7;225.6;233.5;241.4;249.4;257.3;265.2;273.1;281.0;288.9" calcMode="discrete" begin="clk.begin+5.46s" dur="1.12s" fill="freeze"/><set attributeName="opacity" to="0.85" begin="clk.begin+5.46s" dur="1.37s"/></rect>
+</g>
+<g opacity="0"><set attributeName="opacity" to="1" begin="clk.begin+6.83s" dur="12.08s"/>
+<clipPath id="c7"><rect x="20" y="163" height="19" width="0"><animate attributeName="width" values="0.0;7.9;15.8;23.6;31.5;39.4;47.3;55.2;63.0;70.9;78.8;86.7;94.6;102.4;110.3;118.2;126.1;134.0;141.8;149.7;157.6;165.5;173.4;181.2;189.1;197.0;204.9;212.8;220.6;228.5;236.4;244.3;252.2;260.1;267.9;275.8;283.7;291.6;299.5;307.3;315.2;323.1;331.0;338.9;346.7;354.6;362.5;370.4;378.3;386.1;394.0;401.9;409.8;417.7;425.5;433.4;441.3;449.2;457.1;464.9;472.8;480.7;488.6;496.5;504.3;512.2;520.1" calcMode="discrete" begin="clk.begin+6.83s" dur="2.24s" fill="freeze"/></rect></clipPath>
+<text x="20" y="177" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="13" fill="#d6dbe1" xml:space="preserve" clip-path="url(#c7)"><tspan fill="#6fcf97">$ </tspan>go test ./sim -run TestRandomized -seed-start=300024 -seeds=1 -v</text>
+<rect y="165" width="7.5" height="15" fill="#6fcf97" opacity="0"><animate attributeName="x" values="20.0;27.9;35.8;43.6;51.5;59.4;67.3;75.2;83.0;90.9;98.8;106.7;114.6;122.4;130.3;138.2;146.1;154.0;161.8;169.7;177.6;185.5;193.4;201.2;209.1;217.0;224.9;232.8;240.6;248.5;256.4;264.3;272.2;280.1;287.9;295.8;303.7;311.6;319.5;327.3;335.2;343.1;351.0;358.9;366.7;374.6;382.5;390.4;398.3;406.1;414.0;421.9;429.8;437.7;445.5;453.4;461.3;469.2;477.1;484.9;492.8;500.7;508.6;516.5;524.3;532.2;540.1" calcMode="discrete" begin="clk.begin+6.83s" dur="2.24s" fill="freeze"/><set attributeName="opacity" to="0.85" begin="clk.begin+6.83s" dur="2.59s"/></rect>
+</g>
+<g opacity="0"><set attributeName="opacity" to="1" begin="clk.begin+9.42s" dur="9.49s"/>
+<text x="20" y="196" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="13" fill="#d6dbe1" xml:space="preserve">    seed 300024: history is not linearizable</text>
+</g>
+<g opacity="0"><set attributeName="opacity" to="1" begin="clk.begin+9.54s" dur="9.37s"/>
+<text x="20" y="215" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="13" fill="#d6dbe1" xml:space="preserve">      client 4   [426, 585] append(&quot;k0&quot;, &quot;&lt;4.36&gt;&quot;)</text>
+</g>
+<g opacity="0"><set attributeName="opacity" to="1" begin="clk.begin+9.66s" dur="9.25s"/>
+<text x="20" y="234" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="13" fill="#d6dbe1" xml:space="preserve">      client 3   [428, 449] put(&quot;k0&quot;, &quot;&lt;3.41&gt;&quot;)</text>
+</g>
+<g opacity="0"><set attributeName="opacity" to="1" begin="clk.begin+9.78s" dur="9.13s"/>
+<text x="20" y="253" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="13" fill="#d6dbe1" xml:space="preserve">      client 0   [434, 435] get(&quot;k0&quot;) -&gt; &quot;&lt;4.35&gt;&lt;3.40&gt;&lt;4.36&gt;&lt;0.32&gt;&quot;</text>
+</g>
+<g opacity="0"><set attributeName="opacity" to="1" begin="clk.begin+9.90s" dur="9.01s"/>
+<text x="20" y="272" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="13" fill="#ff7b72" xml:space="preserve">      client 0   [436, 437] get(&quot;k0&quot;) -&gt; &quot;&lt;4.35&gt;&lt;3.40&gt;&quot;</text>
+</g>
+<g opacity="0"><set attributeName="opacity" to="1" begin="clk.begin+10.02s" dur="8.89s"/>
+<clipPath id="c13"><rect x="20" y="277" height="19" width="0"><animate attributeName="width" values="0.0;7.9;15.8;23.6;31.5;39.4;47.3;55.2;63.1;71.0;78.8;86.7;94.6;102.5;110.4;118.2;126.1;134.0;141.9;149.8;157.7;165.6;173.4;181.3;189.2;197.1;205.0;212.8;220.7;228.6;236.5;244.4;252.3;260.1;268.0;275.9;283.8;291.7;299.6;307.4;315.3;323.2;331.1;339.0;346.9;354.8;362.6;370.5;378.4;386.3;394.2;402.1;409.9;417.8;425.7;433.6;441.5;449.4;457.2;465.1;473.0" calcMode="discrete" begin="clk.begin+10.02s" dur="2.03s" fill="freeze"/></rect></clipPath>
+<text x="20" y="291" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="13" fill="#7d8794" xml:space="preserve" clip-path="url(#c13)"># client 0 read the value, then read an older one. a deposed</text>
+<rect y="279" width="7.5" height="15" fill="#6fcf97" opacity="0"><animate attributeName="x" values="20.0;27.9;35.8;43.6;51.5;59.4;67.3;75.2;83.1;91.0;98.8;106.7;114.6;122.5;130.4;138.2;146.1;154.0;161.9;169.8;177.7;185.6;193.4;201.3;209.2;217.1;225.0;232.8;240.7;248.6;256.5;264.4;272.3;280.1;288.0;295.9;303.8;311.7;319.6;327.4;335.3;343.2;351.1;359.0;366.9;374.8;382.6;390.5;398.4;406.3;414.2;422.1;429.9;437.8;445.7;453.6;461.5;469.4;477.2;485.1;493.0" calcMode="discrete" begin="clk.begin+10.02s" dur="2.03s" fill="freeze"/><set attributeName="opacity" to="0.85" begin="clk.begin+10.02s" dur="2.28s"/></rect>
+</g>
+<g opacity="0"><set attributeName="opacity" to="1" begin="clk.begin+12.30s" dur="6.61s"/>
+<clipPath id="c14"><rect x="20" y="296" height="19" width="0"><animate attributeName="width" values="0.0;7.9;15.8;23.6;31.5;39.4;47.3;55.2;63.0;70.9;78.8;86.7;94.6;102.4;110.3;118.2;126.1;134.0;141.8;149.7;157.6;165.5;173.4;181.2;189.1;197.0;204.9;212.8;220.6;228.5;236.4;244.3;252.2;260.1;267.9;275.8;283.7;291.6;299.5;307.3;315.2;323.1;331.0;338.9;346.7;354.6;362.5;370.4;378.3;386.1;394.0;401.9;409.8;417.7;425.5;433.4;441.3;449.2;457.1;464.9;472.8;480.7;488.6;496.5;504.3;512.2;520.1" calcMode="discrete" begin="clk.begin+12.30s" dur="2.24s" fill="freeze"/></rect></clipPath>
+<text x="20" y="310" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="13" fill="#7d8794" xml:space="preserve" clip-path="url(#c14)"># leader on the wrong side of a partition answered the second get.</text>
+<rect y="298" width="7.5" height="15" fill="#6fcf97" opacity="0"><animate attributeName="x" values="20.0;27.9;35.8;43.6;51.5;59.4;67.3;75.2;83.0;90.9;98.8;106.7;114.6;122.4;130.3;138.2;146.1;154.0;161.8;169.7;177.6;185.5;193.4;201.2;209.1;217.0;224.9;232.8;240.6;248.5;256.4;264.3;272.2;280.1;287.9;295.8;303.7;311.6;319.5;327.3;335.2;343.1;351.0;358.9;366.7;374.6;382.5;390.4;398.3;406.1;414.0;421.9;429.8;437.7;445.5;453.4;461.3;469.2;477.1;484.9;492.8;500.7;508.6;516.5;524.3;532.2;540.1" calcMode="discrete" begin="clk.begin+12.30s" dur="2.24s" fill="freeze"/><set attributeName="opacity" to="0.85" begin="clk.begin+12.30s" dur="2.49s"/></rect>
+</g>
+<g opacity="0"><set attributeName="opacity" to="1" begin="clk.begin+14.79s" dur="4.12s"/>
+<text x="20" y="329" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, 'Liberation Mono', monospace" font-size="13" fill="#d6dbe1" xml:space="preserve">--- FAIL: TestRandomized (0.02s)</text>
+</g>
+</svg>

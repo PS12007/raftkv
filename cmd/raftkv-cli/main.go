@@ -11,7 +11,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -85,15 +84,19 @@ func main() {
 			err = ck.RemoveServer(ctx, id)
 		}
 	case "status":
+		fmt.Printf("%-18s %-4s %-14s %5s %7s %7s %6s\n", "ADDRESS", "ID", "ROLE", "TERM", "COMMIT", "LAST", "SNAP")
 		for _, a := range addrs {
 			st, e := ck.Status(ctx, a)
 			if e != nil {
-				fmt.Printf("%s: unreachable (%v)\n", a, e)
+				fmt.Printf("%-18s %-4s %s\n", a, "-", "unreachable")
 				continue
 			}
-			b, _ := json.Marshal(map[string]any{"id": st["id"], "state": st["state"], "term": st["term"],
-				"leader": st["leader"], "commit": st["commit"], "lastIndex": st["lastIndex"], "snapIndex": st["snapIndex"]})
-			fmt.Printf("%s: %s\n", a, b)
+			num := func(k string) int64 { v, _ := st[k].(float64); return int64(v) }
+			role, _ := st["state"].(string)
+			if num("leader") == num("id") && role == "leader" {
+				role = "leader *"
+			}
+			fmt.Printf("%-18s %-4d %-14s %5d %7d %7d %6d\n", a, num("id"), role, num("term"), num("commit"), num("lastIndex"), num("snapIndex"))
 		}
 	default:
 		flag.Usage()
