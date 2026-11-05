@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "17 3 * * *" # nightly: a larger batch of fresh seeds
+  workflow_dispatch:
+    inputs:
+      seeds_per_shard:
+        description: "Seeds per shard"
+        default: "2500"
+
+jobs:
+  test:
+    name: Unit, integration and race tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: gofmt
+        run: test -z "$(gofmt -l .)" || (gofmt -l . && exit 1)
+      - name: vet
+        run: go vet ./...
+      - name: test (race)
+        run: go test -race -short ./...
+      - name: integration tests (real gRPC cluster with faults)
+        run: go test -count=1 ./cluster/
+
+  simulation:
+    name: Simulation shard ${{ matrix.shard }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Pick seeds
+        id: seeds
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            n=2500
+            # Fresh seeds every night, disjoint from the per-push range.
+            base=$(( 1000000 + ${{ github.run_number }} * 8 * n ))
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            n=${{ github.event.inputs.seeds_per_shard }}
+            base=$(( 2000000 + ${{ github.run_number }} * 8 * n ))
+          else
+            n=500
+            base=1
+          fi
+          echo "n=$n" >> "$GITHUB_OUTPUT"
+          echo "start=$(( base + ${{ matrix.shard }} * n ))" >> "$GITHUB_OUTPUT"
+      - name: Randomized fault tests + linearizability check
+        run: >
+          go test ./sim -run 'TestRandomized|TestDeterminism' -count=1 -timeout 60m -v
+          -seeds=${{ steps.seeds.outputs.n }} -seed-start=${{ steps.seeds.outputs.start }}
+          -failures "$PWD/failures"
+      - name: Upload failing seeds
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: failures-shard-${{ matrix.shard }}
+          path: failures/
