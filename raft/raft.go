@@ -37,8 +37,18 @@ type Config struct {
 	// whether it could win before incrementing its term, so a node that
 	// was partitioned or restarted cannot depose a healthy leader.
 	PreVote bool
+	// DisableCheckQuorum stops a leader from stepping down when it loses
+	// contact with a majority. Check-quorum is an optimisation; safety (and
+	// ReadIndex) must not depend on it, so the simulator turns it off for
+	// some seeds.
+	DisableCheckQuorum bool
 	// Logf, if set, receives debug output.
 	Logf func(format string, args ...any)
+}
+
+type readReq struct {
+	ctx, index uint64
+	acks       map[NodeID]bool
 }
 
 type progress struct {
@@ -70,15 +80,20 @@ type Raft struct {
 	votes map[NodeID]bool
 
 	msgs         []Message
-	pendingSnap  *Snapshot // snapshot to hand to the service on next Flush
+	reads        []*readReq  // leader: ReadIndex requests awaiting a quorum
+	readStates   []ReadState // confirmed reads, drained by ReadStates()
+	readBcast    bool        // a heartbeat round must go out on Flush
+	replyCtx     uint64      // follower: Context to echo in MsgAppResp
+	pendingSnap  *Snapshot   // snapshot to hand to the service on next Flush
 	hsDirty      bool
 	logDirtyFrom uint64
 	snapDirty    bool
 
-	preVote bool
-	storage Storage
-	rand    *rand.Rand
-	logf    func(string, ...any)
+	preVote     bool
+	checkQuorum bool
+	storage     Storage
+	rand        *rand.Rand
+	logf        func(string, ...any)
 }
 
 // New creates a Raft node, restoring any persisted state.
@@ -105,6 +120,7 @@ func New(c Config) (*Raft, error) {
 		maxEntries:     c.MaxEntriesPerMsg,
 		storage:        c.Storage,
 		preVote:        c.PreVote,
+		checkQuorum:    !c.DisableCheckQuorum,
 		rand:           c.Rand,
 		logf:           c.Logf,
 	}
@@ -337,6 +353,8 @@ func (r *Raft) becomeFollower(term uint64, leader NodeID) {
 	r.leader = leader
 	r.prs = nil
 	r.votes = nil
+	r.reads = nil
+	r.readBcast = false
 	r.resetElectionTimer()
 }
 
@@ -420,7 +438,9 @@ func (r *Raft) Tick() {
 		}
 		if r.electionElapsed >= r.electionTicks {
 			r.electionElapsed = 0
-			r.checkQuorum()
+			if r.checkQuorum {
+				r.checkQuorumNow()
+			}
 		}
 	default:
 		if r.electionElapsed >= r.randomizedTimeout {
@@ -435,10 +455,10 @@ func (r *Raft) Tick() {
 	}
 }
 
-// checkQuorum makes a leader step down if it has not heard from a majority
+// checkQuorumNow makes a leader step down if it has not heard from a majority
 // within an election timeout. It lets clients find the real leader quickly
 // when an old leader is partitioned away.
-func (r *Raft) checkQuorum() {
+func (r *Raft) checkQuorumNow() {
 	active := 0
 	for _, m := range r.members {
 		pr := r.prs[m.ID]
@@ -480,7 +500,7 @@ func (r *Raft) Step(m Message) {
 			// Granted pre-votes carry the term we are about to campaign in.
 		default:
 			leader := None
-			if m.Type == MsgApp || m.Type == MsgSnap {
+			if m.Type == MsgApp || m.Type == MsgSnap || m.Type == MsgHeartbeat {
 				leader = m.From
 			}
 			r.becomeFollower(m.Term, leader)
@@ -488,7 +508,7 @@ func (r *Raft) Step(m Message) {
 	case m.Term < r.term:
 		// Stale sender: tell it about the newer term.
 		switch m.Type {
-		case MsgApp, MsgSnap:
+		case MsgApp, MsgSnap, MsgHeartbeat:
 			r.send(Message{Type: MsgAppResp, To: m.From, Success: false})
 		case MsgVote:
 			r.send(Message{Type: MsgVoteResp, To: m.From, Granted: false})
@@ -528,16 +548,52 @@ func (r *Raft) Step(m Message) {
 			panic(fmt.Sprintf("raft: two leaders in term %d (%d and %d)", r.term, r.id, m.From))
 		}
 		r.becomeFollowerOf(m.From)
+		r.replyCtx = m.Context
 		r.handleAppend(m)
+		r.replyCtx = 0
 	case MsgSnap:
 		if r.state == Leader {
 			panic(fmt.Sprintf("raft: two leaders in term %d (%d and %d)", r.term, r.id, m.From))
 		}
 		r.becomeFollowerOf(m.From)
+		r.replyCtx = m.Context
 		r.handleSnapshot(m)
+		r.replyCtx = 0
+	case MsgHeartbeat:
+		if r.state == Leader {
+			panic(fmt.Sprintf("raft: two leaders in term %d (%d and %d)", r.term, r.id, m.From))
+		}
+		r.becomeFollowerOf(m.From)
+		// LeaderCommit was capped at our match index by the leader, so the
+		// entries up to it are known to match the leader's log.
+		if m.LeaderCommit > r.commit && m.LeaderCommit <= r.log.lastIndex() {
+			r.commit = m.LeaderCommit
+		}
+		r.send(Message{Type: MsgHeartbeatResp, To: m.From, Context: m.Context})
+	case MsgHeartbeatResp:
+		if r.state == Leader {
+			if pr := r.prs[m.From]; pr != nil {
+				pr.recentActive = true
+				if m.Context != 0 {
+					r.ackReads(m.From, m.Context)
+				}
+				if !pr.inflight && pr.next <= r.log.lastIndex() {
+					r.sendAppend(m.From, false)
+				}
+			}
+		}
 	case MsgAppResp:
 		if r.state == Leader {
 			r.handleAppendResp(m)
+		}
+	}
+}
+
+// broadcastHeartbeat sends an entry-less leadership check to every peer.
+func (r *Raft) broadcastHeartbeat() {
+	for _, m := range r.members {
+		if pr := r.prs[m.ID]; m.ID != r.id && pr != nil {
+			r.send(Message{Type: MsgHeartbeat, To: m.ID, LeaderCommit: min(r.commit, pr.match)})
 		}
 	}
 }
@@ -649,6 +705,9 @@ func (r *Raft) handleAppendResp(m Message) {
 	}
 	pr.recentActive = true
 	pr.inflight = false
+	if m.Context != 0 {
+		r.ackReads(m.From, m.Context)
+	}
 	if m.Success {
 		if m.MatchIndex > pr.match {
 			pr.match = m.MatchIndex
@@ -727,7 +786,71 @@ func (r *Raft) send(m Message) {
 	if m.Term == 0 {
 		m.Term = r.term
 	}
+	switch {
+	case m.Type == MsgAppResp:
+		m.Context = r.replyCtx
+	case m.Type == MsgHeartbeatResp:
+		// Context already set from the heartbeat.
+	case (m.Type == MsgApp || m.Type == MsgSnap || m.Type == MsgHeartbeat) && len(r.reads) > 0:
+		// Every append/heartbeat carries the newest pending read's context;
+		// an echo confirms all reads registered before it was sent.
+		m.Context = r.reads[len(r.reads)-1].ctx
+	}
 	r.msgs = append(r.msgs, m)
+}
+
+// ReadIndex starts a linearizable read identified by ctx (which must be
+// non-zero and increasing per node). When a majority confirms this node is
+// still leader, a ReadState{ctx, index} is returned by ReadStates; the read
+// may then be served once the state machine has applied index (§6.4 of the
+// dissertation). It returns ErrNotReady if the leader has not yet committed
+// an entry in its term; callers can fall back to a log read.
+func (r *Raft) ReadIndex(ctx uint64) error {
+	if r.state != Leader {
+		return ErrNotLeader
+	}
+	if t, _ := r.log.term(r.commit); t != r.term {
+		return ErrNotReady
+	}
+	rr := &readReq{ctx: ctx, index: r.commit, acks: map[NodeID]bool{r.id: true}}
+	if r.countAcks(rr) >= r.quorum() {
+		r.readStates = append(r.readStates, ReadState{Ctx: ctx, Index: rr.index})
+		return nil
+	}
+	r.reads = append(r.reads, rr)
+	r.readBcast = true
+	return nil
+}
+
+func (r *Raft) countAcks(rr *readReq) int {
+	n := 0
+	for _, m := range r.members {
+		if rr.acks[m.ID] {
+			n++
+		}
+	}
+	return n
+}
+
+// ackReads records that from has acknowledged leadership as of context c.
+func (r *Raft) ackReads(from NodeID, c uint64) {
+	for _, rr := range r.reads {
+		if rr.ctx <= c {
+			rr.acks[from] = true
+		}
+	}
+	for len(r.reads) > 0 && r.countAcks(r.reads[0]) >= r.quorum() {
+		rr := r.reads[0]
+		r.reads = r.reads[1:]
+		r.readStates = append(r.readStates, ReadState{Ctx: rr.ctx, Index: rr.index})
+	}
+}
+
+// ReadStates returns and clears the confirmed reads.
+func (r *Raft) ReadStates() []ReadState {
+	rs := r.readStates
+	r.readStates = nil
+	return rs
 }
 
 func (r *Raft) broadcastAppend(force bool) {
@@ -821,6 +944,11 @@ func (r *Raft) Snapshot(index uint64, data []byte) {
 // after Flush returns, which is what guarantees that state is durable before
 // other nodes can observe it.
 func (r *Raft) Flush() (msgs []Message, apply []ApplyMsg) {
+	if r.readBcast && r.state == Leader {
+		// One heartbeat round confirms every read registered since the last.
+		r.broadcastHeartbeat()
+	}
+	r.readBcast = false
 	r.persist()
 	msgs, r.msgs = r.msgs, nil
 	if r.pendingSnap != nil {

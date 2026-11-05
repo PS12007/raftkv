@@ -171,6 +171,18 @@ func (s *Store) ApplyOp(op Op) Result {
 	return res
 }
 
+// Read answers a read-only query (an encoded Get op) without changing state
+// or sessions. It implements rsm.Reader for ReadIndex reads.
+func (s *Store) Read(query []byte) []byte {
+	op, err := DecodeOp(query)
+	if err != nil {
+		panic(err)
+	}
+	var res Result
+	res.Value, res.Found = s.data[op.Key]
+	return EncodeResult(res)
+}
+
 // Get reads a key directly (for tests and debugging only; not linearizable).
 func (s *Store) Get(key string) (string, bool) {
 	v, ok := s.data[key]

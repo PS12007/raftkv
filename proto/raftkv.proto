@@ -47,6 +47,8 @@ message RaftMessage {
   // from_addr is the sender's advertised address, so that a node that is
   // joining (and has no membership yet) can reply.
   string from_addr = 17;
+  // context tags heartbeats for ReadIndex and is echoed in replies.
+  uint64 context = 18;
 }
 
 message Empty {}

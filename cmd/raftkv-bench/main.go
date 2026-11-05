@@ -40,8 +40,8 @@ type result struct {
 
 func ms(d time.Duration) float64 { return float64(d.Microseconds()) / 1000 }
 
-func run(size int, fault string, clients int, dur time.Duration, valueSize int, writeRatio float64, nosync bool) (result, error) {
-	c, err := cluster.Start(size, cluster.Options{TickInterval: 10 * time.Millisecond, NoSync: nosync, MaxLogBytes: 4 << 20})
+func run(size int, fault string, clients int, dur time.Duration, valueSize int, writeRatio float64, nosync, logReads bool) (result, error) {
+	c, err := cluster.Start(size, cluster.Options{TickInterval: 10 * time.Millisecond, NoSync: nosync, MaxLogBytes: 4 << 20, LogReads: logReads})
 	if err != nil {
 		return result{}, err
 	}
@@ -181,8 +181,9 @@ func main() {
 	clients := flag.Int("clients", 32, "concurrent clients")
 	dur := flag.Duration("duration", 6*time.Second, "duration per run")
 	valueSize := flag.Int("value", 128, "value size in bytes")
-	writes := flag.Float64("writes", 0.5, "fraction of writes (reads also go through the log)")
+	writes := flag.Float64("writes", 0.5, "fraction of writes")
 	nosync := flag.Bool("nosync", false, "disable fsync")
+	logReads := flag.Bool("log-reads", false, "send Gets through the Raft log instead of ReadIndex")
 	jsonOut := flag.String("json", "", "also write results as JSON to this file")
 	flag.Parse()
 
@@ -196,7 +197,7 @@ func main() {
 			if n == 1 && f != "none" && f != "lossy" && f != "slow" {
 				continue // single node: crash/partition means unavailability by definition
 			}
-			r, err := run(n, f, *clients, *dur, *valueSize, *writes, *nosync)
+			r, err := run(n, f, *clients, *dur, *valueSize, *writes, *nosync, *logReads)
 			if err != nil {
 				log.Fatalf("size %d fault %s: %v", n, f, err)
 			}

@@ -40,8 +40,10 @@ type Config struct {
 	MaxLogBytes    int  // snapshot threshold
 	NoSync         bool // skip fsync (benchmarks only)
 	DisablePreVote bool
-	RequestTimeout time.Duration
-	Logger         *log.Logger
+	// DisableReadIndex sends Gets through the log instead of ReadIndex.
+	DisableReadIndex bool
+	RequestTimeout   time.Duration
+	Logger           *log.Logger
 }
 
 func (c *Config) defaults() {
@@ -330,7 +332,13 @@ func (n *Node) Do(ctx context.Context, req *pb.KVRequest) (*pb.KVReply, error) {
 	op := kv.Op{Type: kv.OpType(req.Op), Key: req.Key, Value: req.Value, ClientID: req.ClientId, Seq: req.Seq}
 	cmd := kv.EncodeOp(op)
 	n.proposed.Add(1)
-	r := n.submit(ctx, func(cb rsm.Callback) { n.core.Submit(cmd, cb) })
+	r := n.submit(ctx, func(cb rsm.Callback) {
+		if op.Type == kv.OpGet && !n.cfg.DisableReadIndex {
+			n.core.SubmitRead(cmd, cb)
+		} else {
+			n.core.Submit(cmd, cb)
+		}
+	})
 	reply := &pb.KVReply{Err: errString(r.err), LeaderHint: r.leader, LeaderAddr: r.addr}
 	if r.err == nil {
 		res, err := kv.DecodeResult(r.res)

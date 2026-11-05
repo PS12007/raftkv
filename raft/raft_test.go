@@ -314,3 +314,51 @@ func TestMembersEncoding(t *testing.T) {
 		t.Fatalf("got %+v", got)
 	}
 }
+
+func TestReadIndex(t *testing.T) {
+	c := newCluster(t, 3)
+	c.propose("x")
+	l := c.waitLeader()
+	if err := l.ReadIndex(1); err != nil {
+		t.Fatal(err)
+	}
+	c.flush(l.ID())
+	c.settle()
+	rs := l.ReadStates()
+	if len(rs) != 1 || rs[0].Ctx != 1 || rs[0].Index != l.Commit() {
+		t.Fatalf("read not confirmed: %+v (commit %d)", rs, l.Commit())
+	}
+
+	// A leader cut off from the majority must never confirm a read: another
+	// leader may already be accepting writes.
+	for id := range c.nodes {
+		if id != l.ID() {
+			c.cut[id] = true
+		}
+	}
+	if err := l.ReadIndex(2); err != nil {
+		t.Fatal(err)
+	}
+	c.flush(l.ID())
+	c.settle()
+	c.tick(5)
+	if rs := l.ReadStates(); len(rs) != 0 {
+		t.Fatalf("isolated leader confirmed a read: %+v", rs)
+	}
+}
+
+func TestReadIndexNotReadyBeforeNoopCommits(t *testing.T) {
+	// A new leader whose no-op has not committed does not know the commit
+	// index of earlier terms, so it must refuse ReadIndex.
+	r, _ := New(Config{ID: 9, Peers: []Member{{ID: 9}, {ID: 10}, {ID: 11}}, Storage: NewMemStorage()})
+	for i := 0; i < 100 && r.State() != Candidate; i++ {
+		r.Tick()
+	}
+	r.Step(Message{Type: MsgVoteResp, From: 10, To: 9, Term: r.Term(), Granted: true})
+	if !r.IsLeader() {
+		t.Fatal("expected to become leader")
+	}
+	if err := r.ReadIndex(1); err != ErrNotReady {
+		t.Fatalf("want ErrNotReady, got %v", err)
+	}
+}

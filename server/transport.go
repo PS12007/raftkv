@@ -203,6 +203,7 @@ func toPB(m raft.Message) *pb.RaftMessage {
 		LastLogIndex: m.LastLogIndex, LastLogTerm: m.LastLogTerm, Granted: m.Granted,
 		PrevLogIndex: m.PrevLogIndex, PrevLogTerm: m.PrevLogTerm, LeaderCommit: m.LeaderCommit,
 		Success: m.Success, MatchIndex: m.MatchIndex, ConflictIndex: m.ConflictIndex, ConflictTerm: m.ConflictTerm,
+		Context: m.Context,
 	}
 	if len(m.Entries) > 0 {
 		out.Entries = make([]*pb.Entry, len(m.Entries))
@@ -226,6 +227,7 @@ func fromPB(m *pb.RaftMessage) raft.Message {
 		LastLogIndex: m.LastLogIndex, LastLogTerm: m.LastLogTerm, Granted: m.Granted,
 		PrevLogIndex: m.PrevLogIndex, PrevLogTerm: m.PrevLogTerm, LeaderCommit: m.LeaderCommit,
 		Success: m.Success, MatchIndex: m.MatchIndex, ConflictIndex: m.ConflictIndex, ConflictTerm: m.ConflictTerm,
+		Context: m.Context,
 	}
 	if len(m.Entries) > 0 {
 		out.Entries = make([]raft.Entry, len(m.Entries))

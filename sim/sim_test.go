@@ -45,6 +45,8 @@ func profile(seed int64) Config {
 	c.FaultEvery = []Time{100 * Millisecond, 300 * Millisecond, 800 * Millisecond}[pick(3)]
 	c.MaxEntriesPerMsg = []int{1, 3, 64}[pick(3)]
 	c.PreVote = pick(2) == 0
+	c.ReadIndex = pick(3) != 0
+	c.NoCheckQuorum = pick(3) == 0
 	if pick(4) == 0 {
 		// High churn: frequent crashes and partitions with fast elections,
 		// producing many terms and conflicting uncommitted log suffixes.

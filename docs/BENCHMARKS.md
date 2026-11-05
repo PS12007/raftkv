@@ -2,7 +2,7 @@
 
 All numbers come from `cmd/raftkv-bench`. It runs a real cluster: every node is a full server with gRPC over localhost and durable WAL storage. All nodes share one 4-vCPU VM (Intel Xeon @ 2.1 GHz). Because every node competes for the same 4 cores, these numbers show **relative** costs (cluster size, faults, fsync). They are not absolute capacity figures.
 
-Workload: 32 closed-loop clients, 50% `Put` with 128-byte values and 50% `Get`. Every read goes through the Raft log, so reads and writes cost about the same. Each run lasts 6 s. For fault scenarios, the fault starts at 2 s and is undone at 4 s.
+Workload: 32 closed-loop clients, 50% `Put` with 128-byte values and 50% `Get`. Each run lasts 6 s. For fault scenarios, the fault starts at 2 s and is undone at 4 s.
 
 - **longest stall** is the longest window in which *no* client completed an operation (that is, unavailability).
 - **client retries** counts attempts that hit a non-leader or timed out. A no-fault run with 32 retries means each client's very first request went to a follower and was redirected.
@@ -16,6 +16,21 @@ go build -o bin/ ./cmd/...
 ```bash
 ./bin/raftkv-bench -sizes 1,3,5,7 -faults none,leader-crash,follower-crash,partition,lossy,slow -duration 6s
 ```
+
+## ReadIndex vs log reads
+
+Since commit "Add ReadIndex reads", `Get` uses ReadIndex by default (dissertation §6.4). The leader notes its commit index and confirms it is still leader with one entry-less heartbeat round acknowledged by a majority (one round is shared by every read that arrived in the meantime). Once it has applied up to that index, it answers from local state. No log entry and no fsync are needed for a read. `-log-reads` restores the old behaviour. Both modes below were measured back to back in the same session (fsync on, 32 clients):
+
+| nodes | 50% writes: log reads | 50% writes: ReadIndex | 10% writes: log reads | 10% writes: ReadIndex |
+|---:|---:|---:|---:|---:|
+| 1 | 27,517 ops/s · p50 1.04 ms | **30,053** · 0.97 ms | 26,437 · 1.10 ms | **31,539** · 0.93 ms |
+| 3 | 13,927 · 2.14 ms | **17,202** · 1.78 ms | 14,446 · 2.08 ms | **22,836** · 1.27 ms |
+| 5 | 12,127 · 2.48 ms | **13,910** · 2.21 ms | 12,819 · 2.33 ms | **18,858** · 1.55 ms |
+| 7 | 9,840 · 3.06 ms | **11,620** · 2.66 ms | 10,607 · 2.84 ms | **16,001** · 1.82 ms |
+
+The first version confirmed reads with full AppendEntries. That resent in-flight entries to every follower and was *slower* than log reads at 5 nodes (8.3k vs 10.1k ops/s at 50% writes). A dedicated `MsgHeartbeat` without entries fixed it.
+
+The tables below were measured earlier, with Gets going through the log. Absolute numbers on this shared VM vary by about ±15% between sessions, so compare within a table.
 
 ## Throughput and latency vs cluster size (fsync on)
 

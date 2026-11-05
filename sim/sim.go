@@ -72,6 +72,11 @@ type Config struct {
 	// followers partially caught up, which exercises log repair.
 	MaxEntriesPerMsg int
 	PreVote          bool
+	// ReadIndex serves Gets with ReadIndex instead of through the log.
+	ReadIndex bool
+	// NoCheckQuorum lets a partitioned leader keep believing it leads,
+	// which widens the window for stale reads if ReadIndex were wrong.
+	NoCheckQuorum bool
 
 	Logf func(format string, args ...any)
 }
@@ -308,7 +313,8 @@ func (n *Node) start() {
 		ID: n.id, Peers: n.peers, Storage: n.storage,
 		ElectionTicks: s.cfg.ElectionTicks, HeartbeatTicks: s.cfg.HeartbeatTicks,
 		MaxEntriesPerMsg: s.cfg.MaxEntriesPerMsg, PreVote: s.cfg.PreVote,
-		Rand: rand.New(rand.NewSource(s.rng.Int63())), Logf: logf,
+		DisableCheckQuorum: s.cfg.NoCheckQuorum,
+		Rand:               rand.New(rand.NewSource(s.rng.Int63())), Logf: logf,
 	})
 	if err != nil {
 		panic(err)
@@ -356,7 +362,11 @@ func (n *Node) deliver(from uint64, payload any) {
 		n.core.R.Step(p)
 	case clientReq:
 		attempt, seq := p.attempt, p.op.Seq
-		n.core.Submit(kv.EncodeOp(p.op), func(res []byte, err error) {
+		submit := n.core.Submit
+		if p.op.Type == kv.OpGet && n.s.cfg.ReadIndex {
+			submit = n.core.SubmitRead
+		}
+		submit(kv.EncodeOp(p.op), func(res []byte, err error) {
 			resp := clientResp{seq: seq, attempt: attempt}
 			resp.leader, _ = n.core.LeaderHint()
 			if err == nil {

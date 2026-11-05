@@ -38,6 +38,12 @@ const (
 	MsgPreVote
 	// MsgPreVoteResp is the PreVote reply.
 	MsgPreVoteResp
+	// MsgHeartbeat is an entry-less leadership check used to confirm
+	// ReadIndex requests. It carries a commit index that is safe for the
+	// follower (min of the leader's commit and that follower's match).
+	MsgHeartbeat
+	// MsgHeartbeatResp is the MsgHeartbeat reply.
+	MsgHeartbeatResp
 )
 
 func (t MsgType) String() string {
@@ -56,6 +62,10 @@ func (t MsgType) String() string {
 		return "PreVote"
 	case MsgPreVoteResp:
 		return "PreVoteResp"
+	case MsgHeartbeat:
+		return "Heartbeat"
+	case MsgHeartbeatResp:
+		return "HeartbeatResp"
 	}
 	return fmt.Sprintf("MsgType(%d)", uint8(t))
 }
@@ -122,6 +132,18 @@ type Message struct {
 
 	// MsgSnap
 	Snapshot *Snapshot
+
+	// Context tags leader heartbeats for ReadIndex; followers echo it in
+	// their MsgAppResp so the leader can confirm it is still leader.
+	Context uint64
+}
+
+// ReadState reports that a ReadIndex request (identified by Ctx) has been
+// confirmed: it is linearizable to read the state machine once it has
+// applied Index.
+type ReadState struct {
+	Ctx   uint64
+	Index uint64
 }
 
 func (m Message) String() string {

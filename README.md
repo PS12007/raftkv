@@ -12,7 +12,7 @@ A distributed, linearizable key-value store in Go. It is built on a from-scratch
 |---|---|
 | **Raft** (`raft/`) | Leader election, log replication with fast conflict backoff, persistence, snapshots with InstallSnapshot, and log compaction. Also Pre-Vote, check-quorum, vote leases, and single-server membership changes. The core is a deterministic, single-threaded state machine. |
 | **Storage** (`raft/filestorage.go`) | CRC-checked write-ahead log plus an atomic snapshot file. Every write is fsynced. A torn tail is detected and dropped. |
-| **KV service** (`kv/`, `rsm/`, `server/`) | Get/Put/Append/Delete over gRPC. Reads go through the log, which makes them linearizable. Per-client sessions (client ID and sequence number) give retried writes exactly-once semantics. |
+| **KV service** (`kv/`, `rsm/`, `server/`) | Get/Put/Append/Delete over gRPC. Reads use ReadIndex: linearizable, and they skip the log, so a read needs no log append and no fsync. Per-client sessions (client ID and sequence number) give retried writes exactly-once semantics. |
 | **Client** (`client/`) | Tracks the leader, follows hints, retries with backoff, and reuses the same `(id, seq)` on every retry. |
 | **Simulator** (`sim/`) | Runs a whole cluster plus clients in one goroutine on a virtual clock. The network drops, delays, duplicates and reorders messages, partitions nodes, and crashes and restarts them. Membership churn and a leader killer are also available. Everything is seeded and bit-for-bit reproducible. |
 | **Linearizability checker** (`linearize/`) | Porcupine-style: the Wing & Gong search with Lowe's memoisation, partitioned per key. |
@@ -110,7 +110,11 @@ The same `raft`, `rsm` and `kv` code runs in two places:
   - A leader must commit an entry in its own term before proposing a change. This is Ongaro's fix for the single-server bug.
   - A leader that removes itself keeps leading until the change commits, then steps down.
   - New servers join as voters immediately; there is no non-voting catch-up phase.
-- **Reads** go through the log. That is simple and obviously linearizable; ReadIndex or leases would be faster.
+- **Reads use ReadIndex** (dissertation §6.4):
+  - The leader records its commit index. It refuses until its own term's no-op has committed, and the read then falls back to the log.
+  - It confirms leadership with an entry-less `MsgHeartbeat` round acknowledged by a majority. Every read waiting at that point shares the same round.
+  - Once it has applied up to that index, it answers from local state.
+  - Reads are 24–58% faster than log reads on 3 nodes (see benchmarks). Read safety does not depend on check-quorum; the simulator disables check-quorum for a third of seeds to prove it.
 
 ## Testing
 
@@ -153,8 +157,15 @@ The checker's search is exponential in the worst case, as in Porcupine and Knoss
 | Commit previous-term entries by counting (Figure 8) | caught once the leader-killer profile was added |
 | Shard migration drops the dedup table | linearizability checker |
 | Serve a shard before its data arrives | liveness / linearizability |
+| ReadIndex confirms reads without a quorum (stale reads from a deposed leader) | linearizability checker, once some seeds ran without check-quorum |
+| Heartbeat sends the leader's full commit index instead of capping it at the follower's match | state machine safety (different entries applied at one index) |
 
-One mutation was *not* caught: bounding the follower commit index by `lastIndex` instead of "index of the last new entry". In this design the leader's no-op plus conflict-term backoff means a follower almost never keeps a stale suffix past a matching batch, so the bug is nearly unreachable here. The correct rule is still implemented.
+Two mutations were *not* caught, because this design makes them nearly unreachable:
+
+- **Follower commit bounded by `lastIndex`** instead of "index of the last new entry". The leader's no-op plus conflict-term backoff means a follower almost never keeps a stale suffix past a matching batch.
+- **Serving a ReadIndex read before applying up to its index.** `rsm` applies every committed entry before it answers reads in the same step.
+
+The correct rules are still implemented.
 
 **Real-network integration tests** (`cluster/`). These run 5 real gRPC servers with 6 concurrent clients through leader crashes, partitions and 2% message loss. They check the wall-clock history for linearizability, and also test live add/remove of servers.
 
@@ -202,7 +213,7 @@ docs/        benchmarks
 
 ## Limitations
 
-- There is no ReadIndex or lease-based read path: every read costs a log round trip.
+- There are no lease-based reads: every read still costs one heartbeat round trip.
 - InstallSnapshot is not chunked.
 - New members join as voters without a catch-up phase. Adding a server to a small cluster can briefly slow commits.
 - The WAL is compacted only when a snapshot is taken.

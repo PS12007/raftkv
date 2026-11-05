@@ -25,7 +25,9 @@ type Options struct {
 	TickInterval time.Duration
 	MaxLogBytes  int
 	NoSync       bool
-	Logger       *log.Logger
+	// LogReads sends Gets through the Raft log instead of ReadIndex.
+	LogReads bool
+	Logger   *log.Logger
 }
 
 // Cluster is a set of in-process nodes.
@@ -90,7 +92,7 @@ func (c *Cluster) nodeConfig(id raft.NodeID, addr string, peers []raft.Member) s
 		ID: id, Addr: addr, Peers: peers,
 		DataDir:      filepath.Join(c.opts.Dir, fmt.Sprintf("node-%d", id)),
 		TickInterval: c.opts.TickInterval, MaxLogBytes: c.opts.MaxLogBytes, NoSync: c.opts.NoSync,
-		Logger: c.opts.Logger,
+		DisableReadIndex: c.opts.LogReads, Logger: c.opts.Logger,
 	}
 }
 
