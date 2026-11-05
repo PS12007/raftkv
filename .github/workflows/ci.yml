@@ -62,6 +62,10 @@ jobs:
           go test ./sim -run 'TestRandomized|TestDeterminism' -count=1 -timeout 60m -v
           -seeds=${{ steps.seeds.outputs.n }} -seed-start=${{ steps.seeds.outputs.start }}
           -failures "$PWD/failures"
+      - name: Sharded multi-group randomized tests
+        run: >
+          go test ./shard -run 'TestSharded' -count=1 -timeout 60m -v
+          -shard-seeds=$(( ${{ steps.seeds.outputs.n }} / 10 )) -shard-seed-start=${{ steps.seeds.outputs.start }}
       - name: Upload failing seeds
         if: failure()
         uses: actions/upload-artifact@v4
