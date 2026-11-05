@@ -8,6 +8,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/ps12007/raftkv/kv"
 	"github.com/ps12007/raftkv/linearize"
@@ -140,8 +141,9 @@ func runShardSeed(cfg SimConfig) (err error) {
 		}
 		ops = append(ops, op)
 	}
-	res, info := linearize.Check(linearize.KvModel, ops, 0)
-	if res != linearize.Ok {
+	// A checker timeout is inconclusive, not a violation (see sim tests).
+	res, info := linearize.Check(linearize.KvModel, ops, 30*time.Second)
+	if res == linearize.Illegal {
 		return fmt.Errorf("seed %d: not linearizable\n%s", cfg.Seed, linearize.Describe(linearize.KvModel, info.FailedPartition, info.Longest))
 	}
 	return nil

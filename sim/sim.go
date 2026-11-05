@@ -14,6 +14,7 @@ import (
 	"hash/fnv"
 	"math/rand"
 	"sort"
+	"time"
 
 	"github.com/ps12007/raftkv/kv"
 	"github.com/ps12007/raftkv/linearize"
@@ -658,6 +659,9 @@ type Result struct {
 	History []linearize.Operation
 	Trace   uint64 // hash of the full execution, for determinism checks
 	Stats   Stats
+
+	SimTime, CheckTime time.Duration // wall-clock cost (set by tests)
+	Inconclusive       bool          // the linearizability check timed out
 }
 
 func (s *Sim) runUntil(t Time, done func() bool) {
@@ -758,7 +762,7 @@ func (s *Sim) checkConvergence() {
 
 // CheckLinearizable runs the Porcupine-style checker on a history. Gets
 // whose outcome is unknown are dropped (they have no effect).
-func CheckLinearizable(h []linearize.Operation) (linearize.Result, string) {
+func CheckLinearizable(h []linearize.Operation, timeout time.Duration) (linearize.Result, string) {
 	var ops []linearize.Operation
 	for _, op := range h {
 		if op.Return == linearize.Pending && op.Input.(linearize.KvInput).Op == uint8(kv.OpGet) {
@@ -769,7 +773,7 @@ func CheckLinearizable(h []linearize.Operation) (linearize.Result, string) {
 		}
 		ops = append(ops, op)
 	}
-	res, info := linearize.Check(linearize.KvModel, ops, 0)
+	res, info := linearize.Check(linearize.KvModel, ops, timeout)
 	if res == linearize.Illegal {
 		return res, linearize.Describe(linearize.KvModel, info.FailedPartition, info.Longest)
 	}

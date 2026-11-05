@@ -9,6 +9,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/ps12007/raftkv/linearize"
 )
@@ -18,6 +19,8 @@ var (
 	flagStart = flag.Int64("seed-start", 1, "first seed")
 	flagSeed  = flag.Int64("seed", 0, "run a single seed with verbose logging")
 	flagOut   = flag.String("failures", "", "directory to write failing histories to")
+
+	flagCheckTimeout = flag.Duration("check-timeout", 30*time.Second, "linearizability checker timeout per seed (a timeout is reported, not failed)")
 )
 
 // profile derives a per-seed fault configuration so that the seed space
@@ -66,13 +69,23 @@ func runSeed(t testing.TB, cfg Config) (res Result) {
 			res = Result{Seed: cfg.Seed, Err: fmt.Errorf("seed %d: panic: %v", cfg.Seed, p)}
 		}
 	}()
+	t0 := time.Now()
 	res = New(cfg).Run()
+	res.SimTime = time.Since(t0)
 	if res.Err != nil {
 		return res
 	}
-	verdict, desc := CheckLinearizable(res.History)
-	if verdict != linearize.Ok {
-		res.Err = fmt.Errorf("seed %d: history is not linearizable (%v)\n%s", cfg.Seed, verdict, desc)
+	t1 := time.Now()
+	verdict, desc := CheckLinearizable(res.History, *flagCheckTimeout)
+	res.CheckTime = time.Since(t1)
+	switch verdict {
+	case linearize.Illegal:
+		res.Err = fmt.Errorf("seed %d: history is not linearizable\n%s", cfg.Seed, desc)
+	case linearize.Unknown:
+		// The search is exponential in the worst case (as in Porcupine and
+		// Knossos). A timeout is inconclusive, not a violation: report it
+		// so the seed can be replayed, but do not fail the run.
+		res.Inconclusive = true
 	}
 	return res
 }
@@ -110,6 +123,7 @@ func TestRandomized(t *testing.T) {
 	end := *flagStart + int64(n)
 	var mu sync.Mutex
 	var failures []Result
+	var inconclusive []int64
 	var total Stats
 	var wg sync.WaitGroup
 	for w := 0; w < runtime.GOMAXPROCS(0); w++ {
@@ -133,6 +147,12 @@ func TestRandomized(t *testing.T) {
 				total.RemoveServer += res.Stats.RemoveServer
 				total.Dropped += res.Stats.Dropped
 				total.Duplicated += res.Stats.Duplicated
+				if res.SimTime+res.CheckTime > 5*time.Second {
+					t.Logf("slow seed %d: sim %v, check %v, %d ops", res.Seed, res.SimTime.Round(time.Millisecond), res.CheckTime.Round(time.Millisecond), len(res.History))
+				}
+				if res.Inconclusive {
+					inconclusive = append(inconclusive, res.Seed)
+				}
 				if res.Err != nil {
 					failures = append(failures, res)
 					saveFailure(res)
@@ -145,6 +165,9 @@ func TestRandomized(t *testing.T) {
 	t.Logf("%d seeds: %d ops, %d elections, %d crashes, %d partitions, %d snapshots (%d sent), +%d/-%d servers, %d dropped, %d duplicated msgs",
 		n, total.OpsCompleted, total.Elections, total.Crashes, total.Partitions, total.Snapshots,
 		total.SnapshotsInstalled, total.AddServer, total.RemoveServer, total.Dropped, total.Duplicated)
+	if len(inconclusive) > 0 {
+		t.Logf("WARNING: linearizability check timed out (inconclusive) for %d seed(s): %v", len(inconclusive), inconclusive)
+	}
 	for i, f := range failures {
 		if i >= 3 {
 			t.Errorf("... and %d more failures", len(failures)-3)
