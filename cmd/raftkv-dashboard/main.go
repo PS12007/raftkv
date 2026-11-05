@@ -26,7 +26,7 @@ func main() {
 	nodes := flag.String("nodes", "", "comma-separated /status URLs of running servers")
 	demo := flag.Int("demo", 5, "if -nodes is empty, run an in-process cluster of this size")
 	clients := flag.Int("clients", 4, "demo client load generators")
-	maxLog := flag.Int("max-log-bytes", 4096, "demo snapshot threshold (small, so snapshots are visible)")
+	maxLog := flag.Int("max-log-bytes", 16<<10, "demo snapshot threshold (small, so snapshots are visible)")
 	flag.Parse()
 
 	var srv *dashboard.Server

@@ -196,6 +196,11 @@ function renderLogs(st) {
       cells.append(c);
     }
     row.append(cells);
+    if (s) {
+      const behind = maxLast - s.lastIndex;
+      row.append(el('span', {class: 'stat', style: 'font-size:11px;white-space:nowrap'},
+        behind > 0 ? `last ${s.lastIndex} (${behind} behind)` : `last ${s.lastIndex}`));
+    } else row.append(el('span', {class: 'stat', style: 'font-size:11px'}, 'down'));
     box.append(row);
     if (leader && n.id === leader.id && leader.status.progress) {
       const mrow = el('div', {class: 'logrow'}, el('span', {class: 'lbl', style: 'font-weight:400;color:var(--muted);font-size:11px'}, 'match'));
@@ -239,6 +244,7 @@ function renderChart() {
 }
 
 function renderEvents(st) {
+  st.events = st.events || [];
   const ul = document.getElementById('events');
   ul.replaceChildren(...st.events.slice().reverse().map(e =>
     el('li', {}, el('time', {}, new Date(e.time).toLocaleTimeString()), el('span', {class: e.kind}, e.text))));

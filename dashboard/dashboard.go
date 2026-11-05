@@ -184,8 +184,11 @@ func (s *Server) state(ctx context.Context) State {
 			if p.Status.State == "leader" && n.Status.State != "leader" {
 				s.addEvent("stepdown", "node %d stepped down (term %d)", n.ID, n.Status.Term)
 			}
-			if n.Status.SnapIndex > p.Status.SnapIndex {
-				s.addEvent("snapshot", "node %d snapshot at index %d", n.ID, n.Status.SnapIndex)
+			// Snapshots a node takes itself are routine; report only those
+			// installed from the leader (the node was behind the snapshot).
+			if n.Status.SnapIndex > p.Status.SnapIndex && p.Status.AppliedSM < n.Status.SnapIndex &&
+				n.Status.SnapIndex-p.Status.AppliedSM > 50 {
+				s.addEvent("snapshot", "node %d installed a snapshot from the leader (jumped %d → %d)", n.ID, p.Status.AppliedSM, n.Status.SnapIndex)
 			}
 			if fmt.Sprint(n.Status.Members) != fmt.Sprint(p.Status.Members) {
 				var ids []uint64
@@ -204,7 +207,7 @@ func (s *Server) state(ctx context.Context) State {
 		s.opsPrev, s.opsAt = cur, now
 	}
 	return State{Time: now.UnixMilli(), Demo: s.cluster != nil, Nodes: nodes,
-		Events: append([]Event(nil), s.events...), Throughput: s.tput, Load: s.load.Load(), Lossy: s.lossy}
+		Events: append([]Event{}, s.events...), Throughput: s.tput, Load: s.load.Load(), Lossy: s.lossy}
 }
 
 // Handler returns the HTTP handler.
