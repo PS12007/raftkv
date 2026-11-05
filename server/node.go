@@ -39,6 +39,7 @@ type Config struct {
 	HeartbeatTicks int
 	MaxLogBytes    int  // snapshot threshold
 	NoSync         bool // skip fsync (benchmarks only)
+	DisablePreVote bool
 	RequestTimeout time.Duration
 	Logger         *log.Logger
 }
@@ -104,7 +105,8 @@ func Start(cfg Config) (*Node, error) {
 	r, err := raft.New(raft.Config{
 		ID: cfg.ID, Peers: cfg.Peers, Storage: fs,
 		ElectionTicks: cfg.ElectionTicks, HeartbeatTicks: cfg.HeartbeatTicks,
-		Rand: rand.New(rand.NewSource(time.Now().UnixNano() ^ int64(cfg.ID))),
+		PreVote: !cfg.DisablePreVote,
+		Rand:    rand.New(rand.NewSource(time.Now().UnixNano() ^ int64(cfg.ID))),
 	})
 	if err != nil {
 		fs.Close()
@@ -113,11 +115,11 @@ func Start(cfg Config) (*Node, error) {
 	store := kv.NewStore()
 	n := &Node{
 		cfg: cfg, storage: fs, store: store,
-		core:      rsm.New(r, store, cfg.MaxLogBytes),
-		recvC:     make(chan raft.Message, 8192),
-		reqC:      make(chan func(), 8192),
-		stopC:     make(chan struct{}),
-		doneC:     make(chan struct{}),
+		core:  rsm.New(r, store, cfg.MaxLogBytes),
+		recvC: make(chan raft.Message, 8192),
+		reqC:  make(chan func(), 8192),
+		stopC: make(chan struct{}),
+		doneC: make(chan struct{}),
 	}
 	n.lis, err = net.Listen("tcp", cfg.Addr)
 	if err != nil {

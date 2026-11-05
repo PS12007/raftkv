@@ -33,6 +33,10 @@ type Config struct {
 	Storage          Storage
 	// Rand drives election timeout randomisation. Seed it for determinism.
 	Rand *rand.Rand
+	// PreVote enables the Pre-Vote phase: a node that times out first asks
+	// whether it could win before incrementing its term, so a node that
+	// was partitioned or restarted cannot depose a healthy leader.
+	PreVote bool
 	// Logf, if set, receives debug output.
 	Logf func(format string, args ...any)
 }
@@ -59,8 +63,8 @@ type Raft struct {
 	configIndex uint64   // index of the entry that set members (0 = snapshot)
 
 	electionTicks, heartbeatTicks, maxEntries int
-	electionElapsed, heartbeatElapsed      int
-	randomizedTimeout                      int
+	electionElapsed, heartbeatElapsed         int
+	randomizedTimeout                         int
 
 	prs   map[NodeID]*progress
 	votes map[NodeID]bool
@@ -71,6 +75,7 @@ type Raft struct {
 	logDirtyFrom uint64
 	snapDirty    bool
 
+	preVote bool
 	storage Storage
 	rand    *rand.Rand
 	logf    func(string, ...any)
@@ -99,6 +104,7 @@ func New(c Config) (*Raft, error) {
 		heartbeatTicks: c.HeartbeatTicks,
 		maxEntries:     c.MaxEntriesPerMsg,
 		storage:        c.Storage,
+		preVote:        c.PreVote,
 		rand:           c.Rand,
 		logf:           c.Logf,
 	}
@@ -355,6 +361,23 @@ func (r *Raft) campaign() {
 	}
 }
 
+func (r *Raft) preCampaign() {
+	r.state = PreCandidate
+	r.leader = None
+	r.votes = map[NodeID]bool{r.id: true}
+	r.resetElectionTimer()
+	r.debug("pre-campaign last=%d/%d", r.log.lastIndex(), r.log.lastTerm())
+	if r.countVotes() >= r.quorum() {
+		r.campaign()
+		return
+	}
+	for _, m := range r.members {
+		if m.ID != r.id {
+			r.send(Message{Type: MsgPreVote, To: m.ID, Term: r.term + 1, LastLogIndex: r.log.lastIndex(), LastLogTerm: r.log.lastTerm()})
+		}
+	}
+}
+
 func (r *Raft) countVotes() int {
 	n := 0
 	for _, m := range r.members {
@@ -401,7 +424,9 @@ func (r *Raft) Tick() {
 		}
 	default:
 		if r.electionElapsed >= r.randomizedTimeout {
-			if r.promotable() {
+			if r.promotable() && r.preVote {
+				r.preCampaign()
+			} else if r.promotable() {
 				r.campaign()
 			} else {
 				r.resetElectionTimer()
@@ -444,15 +469,22 @@ func (r *Raft) Step(m Message) {
 	}
 	switch {
 	case m.Term > r.term:
-		if m.Type == MsgVote && r.inLease() {
-			r.debug("ignore vote from %d in lease", m.From)
+		if (m.Type == MsgVote || m.Type == MsgPreVote) && r.inLease() {
+			r.debug("ignore %v from %d in lease", m.Type, m.From)
 			return
 		}
-		leader := None
-		if m.Type == MsgApp || m.Type == MsgSnap {
-			leader = m.From
+		switch {
+		case m.Type == MsgPreVote:
+			// Never change term because of a pre-vote request.
+		case m.Type == MsgPreVoteResp && m.Granted:
+			// Granted pre-votes carry the term we are about to campaign in.
+		default:
+			leader := None
+			if m.Type == MsgApp || m.Type == MsgSnap {
+				leader = m.From
+			}
+			r.becomeFollower(m.Term, leader)
 		}
-		r.becomeFollower(m.Term, leader)
 	case m.Term < r.term:
 		// Stale sender: tell it about the newer term.
 		switch m.Type {
@@ -460,6 +492,8 @@ func (r *Raft) Step(m Message) {
 			r.send(Message{Type: MsgAppResp, To: m.From, Success: false})
 		case MsgVote:
 			r.send(Message{Type: MsgVoteResp, To: m.From, Granted: false})
+		case MsgPreVote:
+			r.send(Message{Type: MsgPreVoteResp, To: m.From, Granted: false})
 		}
 		return
 	}
@@ -467,6 +501,21 @@ func (r *Raft) Step(m Message) {
 	switch m.Type {
 	case MsgVote:
 		r.handleVote(m)
+	case MsgPreVote:
+		upToDate := m.LastLogTerm > r.log.lastTerm() ||
+			(m.LastLogTerm == r.log.lastTerm() && m.LastLogIndex >= r.log.lastIndex())
+		if m.Term > r.term && upToDate {
+			r.send(Message{Type: MsgPreVoteResp, To: m.From, Term: m.Term, Granted: true})
+		} else {
+			r.send(Message{Type: MsgPreVoteResp, To: m.From, Granted: false})
+		}
+	case MsgPreVoteResp:
+		if r.state == PreCandidate && (!m.Granted || m.Term == r.term+1) {
+			r.votes[m.From] = m.Granted
+			if r.countVotes() >= r.quorum() {
+				r.campaign()
+			}
+		}
 	case MsgVoteResp:
 		if r.state == Candidate {
 			r.votes[m.From] = m.Granted

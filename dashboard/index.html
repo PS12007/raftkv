@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>raftkv dashboard</title>
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --ink: #1b1f24; --muted: #667080; --line: #e3e6eb;
+  --leader: #c98a00; --follower: #2f6fde; --candidate: #d4551f; --down: #9aa3ad;
+  --ok: #1f9d55; --bad: #d23c3c; --cell-empty: #eef0f3;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #0f1216; --panel: #171b21; --ink: #e7eaee; --muted: #8b95a3; --line: #262c34;
+    --leader: #f0b429; --follower: #5b93ff; --candidate: #ff7a45; --down: #5c6570; --cell-empty: #1f252d; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.4 system-ui, -apple-system, Segoe UI, sans-serif; }
+header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding: 14px 20px; border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0; z-index: 2; }
+h1 { font-size: 18px; margin: 0 12px 0 0; letter-spacing: .2px; }
+h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 10px; font-weight: 600; }
+.pill { padding: 2px 10px; border-radius: 999px; font-size: 12px; border: 1px solid var(--line); color: var(--muted); }
+.pill.live { color: var(--ok); border-color: var(--ok); }
+.pill.dead { color: var(--bad); border-color: var(--bad); }
+.stat { font-variant-numeric: tabular-nums; color: var(--muted); }
+.stat b { color: var(--ink); }
+.spacer { flex: 1; }
+button { font: inherit; font-size: 12px; padding: 5px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); cursor: pointer; }
+button:hover { border-color: var(--muted); }
+button.on { background: var(--ink); color: var(--panel); }
+main { padding: 16px 20px 40px; display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr) 320px; }
+@media (max-width: 1000px) { main { grid-template-columns: minmax(0, 1fr); } }
+section { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; min-width: 0; }
+.nodes { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; }
+.node { border: 1px solid var(--line); border-left: 4px solid var(--down); border-radius: 8px; padding: 10px 12px; }
+.node.leader { border-left-color: var(--leader); }
+.node.follower { border-left-color: var(--follower); }
+.node.candidate { border-left-color: var(--candidate); }
+.node.down { opacity: .55; }
+.node .top { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+.node .id { font-size: 20px; font-weight: 700; }
+.role { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
+.leader .role { color: var(--leader); } .follower .role { color: var(--follower); } .candidate .role { color: var(--candidate); } .down .role { color: var(--down); }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 1px 10px; font-size: 12px; font-variant-numeric: tabular-nums; }
+.kv span:nth-child(odd) { color: var(--muted); }
+.node .actions { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
+.tag { font-size: 10px; padding: 1px 6px; border-radius: 4px; background: var(--bad); color: #fff; }
+.logs { overflow-x: auto; }
+.logrow { display: flex; align-items: center; gap: 8px; margin: 4px 0; }
+.logrow .lbl { width: 44px; flex: none; font-weight: 600; font-variant-numeric: tabular-nums; }
+.cells { display: flex; gap: 2px; position: relative; }
+.cell { width: 14px; height: 22px; border-radius: 3px; background: var(--cell-empty); position: relative; flex: none; }
+.cell.uncommitted { opacity: .45; outline: 1px dashed var(--muted); outline-offset: -1px; }
+.cell.compacted { background-image: repeating-linear-gradient(45deg, transparent 0 3px, rgba(127,127,127,.35) 3px 5px); }
+.cell .mark { position: absolute; left: 0; right: 0; bottom: -6px; height: 3px; border-radius: 2px; background: var(--ink); }
+.axis { display: flex; gap: 2px; margin-left: 52px; font-size: 10px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.axis span { width: 14px; flex: none; text-align: center; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--muted); margin-top: 12px; }
+.legend i { display: inline-block; width: 12px; height: 12px; border-radius: 3px; vertical-align: -2px; margin-right: 4px; background: var(--cell-empty); }
+.events { list-style: none; margin: 0; padding: 0; font-size: 12px; max-height: 520px; overflow-y: auto; }
+.events li { padding: 5px 0; border-bottom: 1px solid var(--line); display: flex; gap: 8px; }
+.events time { color: var(--muted); font-variant-numeric: tabular-nums; flex: none; }
+.events .leader { color: var(--leader); } .events .down, .events .fault { color: var(--bad); }
+svg text { fill: var(--muted); font-size: 10px; }
+.chart { width: 100%; height: 120px; display: block; }
+.side { display: grid; gap: 16px; align-content: start; }
+.sub { color: var(--muted); font-size: 12px; margin: -4px 0 10px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>raftkv</h1>
+  <span id="conn" class="pill">connecting…</span>
+  <span class="stat">leader <b id="leader">–</b></span>
+  <span class="stat">term <b id="term">–</b></span>
+  <span class="stat">commit <b id="commit">–</b></span>
+  <span class="stat" id="tputWrap">throughput <b id="tput">–</b> ops/s</span>
+  <span class="spacer"></span>
+  <span id="controls" hidden>
+    <button onclick="ctl('crash-leader')">Crash leader</button>
+    <button id="lossyBtn" onclick="ctl('lossy')">Lossy network</button>
+    <button onclick="ctl('heal')">Heal network</button>
+    <button onclick="ctl('add')">Add node</button>
+    <button id="loadBtn" onclick="ctl('load')">Client load</button>
+  </span>
+</header>
+<main>
+  <div style="display:grid; gap:16px; min-width:0">
+    <section>
+      <h2>Nodes</h2>
+      <div class="nodes" id="nodes"></div>
+    </section>
+    <section>
+      <h2>Log replication</h2>
+      <p class="sub">Last log entries on each node, aligned by index and coloured by term. Faded entries are not yet committed; hatched ones are compacted into a snapshot. Under the leader's row, ticks show each follower's match index.</p>
+      <div class="logs" id="logs"></div>
+      <div class="legend" id="legend"></div>
+    </section>
+  </div>
+  <div class="side">
+    <section>
+      <h2>Term &amp; commit index</h2>
+      <svg class="chart" id="chart" viewBox="0 0 300 120" preserveAspectRatio="none"></svg>
+    </section>
+    <section>
+      <h2>Events</h2>
+      <ul class="events" id="events"></ul>
+    </section>
+  </div>
+</main>
+<script>
+const WINDOW = 40;
+let demo = false;
+const history = []; // {t, term, commit}
+
+function termColor(t) {
+  if (!t) return 'var(--cell-empty)';
+  const hue = (t * 67 + 200) % 360;
+  return `hsl(${hue} 65% 52%)`;
+}
+
+async function ctl(action, id) {
+  const q = new URLSearchParams({action});
+  if (id !== undefined) q.set('id', id);
+  const r = await fetch('/api/control?' + q, {method: 'POST'});
+  if (!r.ok) alert(await r.text());
+}
+
+function el(tag, attrs = {}, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === 'class') e.className = v; else if (k.startsWith('on')) e[k] = v; else e.setAttribute(k, v);
+  }
+  for (const k of kids) e.append(k);
+  return e;
+}
+
+function renderNodes(st) {
+  const box = document.getElementById('nodes');
+  box.replaceChildren();
+  for (const n of st.nodes) {
+    const s = n.status;
+    const role = n.up && s ? s.state : 'down';
+    const card = el('div', {class: `node ${role} ${n.up ? '' : 'down'}`});
+    const top = el('div', {class: 'top'}, el('span', {class: 'id'}, `${n.id}`), el('span', {class: 'role'}, role));
+    if (n.isolated) top.append(el('span', {class: 'tag'}, 'isolated'));
+    card.append(top);
+    if (s && n.up) {
+      const kv = el('div', {class: 'kv'});
+      const rows = [['term', s.term], ['leader', s.leader || '–'], ['voted for', s.votedFor || '–'],
+        ['commit', s.commit], ['applied', s.appliedSM], ['last index', `${s.lastIndex} (t${s.lastTerm})`],
+        ['snapshot', s.snapIndex], ['log bytes', s.logBytes.toLocaleString()], ['keys', s.keys],
+        ['members', (s.members || []).map(m => m.id).join(', ') || '–']];
+      for (const [k, v] of rows) kv.append(el('span', {}, k), el('span', {}, `${v}`));
+      card.append(kv);
+    }
+    if (demo) {
+      const a = el('div', {class: 'actions'});
+      if (n.up) a.append(el('button', {onclick: () => ctl('crash', n.id)}, 'Crash'));
+      else a.append(el('button', {onclick: () => ctl('restart', n.id)}, 'Restart'));
+      a.append(el('button', {onclick: () => ctl('isolate', n.id)}, n.isolated ? 'Reconnect' : 'Isolate'));
+      if (n.up) a.append(el('button', {onclick: () => ctl('remove', n.id)}, 'Remove'));
+      card.append(a);
+    }
+    box.append(card);
+  }
+}
+
+function renderLogs(st) {
+  const ups = st.nodes.filter(n => n.up && n.status);
+  const box = document.getElementById('logs');
+  box.replaceChildren();
+  if (!ups.length) return;
+  const maxLast = Math.max(...ups.map(n => n.status.lastIndex));
+  const lo = Math.max(1, maxLast - WINDOW + 1);
+  const terms = new Set();
+  const leader = ups.find(n => n.status.state === 'leader');
+  for (const n of st.nodes) {
+    const row = el('div', {class: 'logrow'}, el('span', {class: 'lbl'}, `n${n.id}`));
+    const cells = el('div', {class: 'cells'});
+    const s = n.up ? n.status : null;
+    const recent = s ? s.recentTerms || [] : [];
+    const firstRecent = s ? s.lastIndex - recent.length + 1 : 0;
+    for (let i = lo; i < lo + WINDOW; i++) {
+      const c = el('div', {class: 'cell'});
+      if (s) {
+        if (i <= s.snapIndex) { c.classList.add('compacted'); c.title = `#${i} compacted`; }
+        else if (i <= s.lastIndex && i >= firstRecent) {
+          const t = recent[i - firstRecent];
+          terms.add(t);
+          c.style.background = termColor(t);
+          c.title = `#${i} term ${t}` + (i > s.commit ? ' (uncommitted)' : '');
+          if (i > s.commit) c.classList.add('uncommitted');
+        }
+      }
+      cells.append(c);
+    }
+    row.append(cells);
+    box.append(row);
+    if (leader && n.id === leader.id && leader.status.progress) {
+      const mrow = el('div', {class: 'logrow'}, el('span', {class: 'lbl', style: 'font-weight:400;color:var(--muted);font-size:11px'}, 'match'));
+      const mc = el('div', {class: 'cells'});
+      const matches = {};
+      for (const [id, p] of Object.entries(leader.status.progress)) {
+        if (+id === leader.id) continue;
+        (matches[p.match] = matches[p.match] || []).push(id);
+      }
+      for (let i = lo; i < lo + WINDOW; i++) {
+        const c = el('div', {class: 'cell', style: 'background:transparent;height:12px'});
+        if (matches[i]) { c.title = `match index of ${matches[i].join(', ')}`; c.append(el('div', {class: 'mark', style: 'bottom:4px'})); }
+        mc.append(c);
+      }
+      mrow.append(mc);
+      box.append(mrow);
+    }
+  }
+  const axis = el('div', {class: 'axis'});
+  for (let i = lo; i < lo + WINDOW; i++) axis.append(el('span', {}, (i % 5 === 0) ? `${i}` : ''));
+  box.append(axis);
+  const legend = document.getElementById('legend');
+  legend.replaceChildren(...[...terms].sort((a, b) => a - b).slice(-8).map(t =>
+    el('span', {}, el('i', {style: `background:${termColor(t)}`}), `term ${t}`)));
+}
+
+function renderChart() {
+  const svg = document.getElementById('chart');
+  if (history.length < 2) return;
+  const t0 = history[0].t, t1 = history[history.length - 1].t;
+  const maxTerm = Math.max(...history.map(h => h.term), 1);
+  const minC = Math.min(...history.map(h => h.commit)), maxC = Math.max(...history.map(h => h.commit), minC + 1);
+  const x = t => 4 + (t - t0) / Math.max(1, t1 - t0) * 292;
+  const yT = v => 112 - v / maxTerm * 100;
+  const yC = v => 112 - (v - minC) / (maxC - minC) * 100;
+  const path = (f, key) => history.map((h, i) => `${i ? 'L' : 'M'}${x(h.t).toFixed(1)},${f(h[key]).toFixed(1)}`).join('');
+  svg.innerHTML = `
+    <path d="${path(yC, 'commit')}" fill="none" stroke="var(--follower)" stroke-width="1.5" vector-effect="non-scaling-stroke"/>
+    <path d="${path(yT, 'term')}" fill="none" stroke="var(--leader)" stroke-width="2" vector-effect="non-scaling-stroke"/>
+    <text x="4" y="10">term (max ${maxTerm})</text><text x="296" y="10" text-anchor="end">commit ${maxC}</text>`;
+}
+
+function renderEvents(st) {
+  const ul = document.getElementById('events');
+  ul.replaceChildren(...st.events.slice().reverse().map(e =>
+    el('li', {}, el('time', {}, new Date(e.time).toLocaleTimeString()), el('span', {class: e.kind}, e.text))));
+}
+
+function render(st) {
+  demo = st.demo;
+  document.getElementById('controls').hidden = !demo;
+  document.getElementById('tputWrap').hidden = !demo;
+  document.getElementById('lossyBtn').classList.toggle('on', st.lossy);
+  document.getElementById('loadBtn').classList.toggle('on', st.load);
+  const ups = st.nodes.filter(n => n.up && n.status);
+  const leader = ups.filter(n => n.status.state === 'leader').sort((a, b) => b.status.term - a.status.term)[0];
+  const term = ups.length ? Math.max(...ups.map(n => n.status.term)) : 0;
+  const commit = ups.length ? Math.max(...ups.map(n => n.status.commit)) : 0;
+  document.getElementById('leader').textContent = leader ? `n${leader.id}` : 'none';
+  document.getElementById('term').textContent = term;
+  document.getElementById('commit').textContent = commit;
+  document.getElementById('tput').textContent = st.throughput.toFixed(0);
+  history.push({t: st.time, term, commit});
+  while (history.length && history[0].t < st.time - 60000) history.shift();
+  renderNodes(st); renderLogs(st); renderChart(); renderEvents(st);
+}
+
+function connect() {
+  const conn = document.getElementById('conn');
+  const es = new EventSource('/api/stream');
+  es.onopen = () => { conn.textContent = 'live'; conn.className = 'pill live'; };
+  es.onmessage = e => render(JSON.parse(e.data));
+  es.onerror = () => { conn.textContent = 'disconnected'; conn.className = 'pill dead'; es.close(); setTimeout(connect, 1000); };
+}
+connect();
+</script>
+</body>
+</html>

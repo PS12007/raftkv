@@ -33,6 +33,11 @@ const (
 	MsgAppResp
 	// MsgSnap is InstallSnapshot (sent whole, not chunked).
 	MsgSnap
+	// MsgPreVote asks whether a node would vote for us in the next term,
+	// without anyone changing term (dissertation §9.6).
+	MsgPreVote
+	// MsgPreVoteResp is the PreVote reply.
+	MsgPreVoteResp
 )
 
 func (t MsgType) String() string {
@@ -47,6 +52,10 @@ func (t MsgType) String() string {
 		return "AppResp"
 	case MsgSnap:
 		return "Snap"
+	case MsgPreVote:
+		return "PreVote"
+	case MsgPreVoteResp:
+		return "PreVoteResp"
 	}
 	return fmt.Sprintf("MsgType(%d)", uint8(t))
 }
@@ -117,6 +126,10 @@ type Message struct {
 
 func (m Message) String() string {
 	switch m.Type {
+	case MsgPreVote:
+		return fmt.Sprintf("%d->%d PreVote t=%d last=%d/%d", m.From, m.To, m.Term, m.LastLogIndex, m.LastLogTerm)
+	case MsgPreVoteResp:
+		return fmt.Sprintf("%d->%d PreVoteResp t=%d granted=%v", m.From, m.To, m.Term, m.Granted)
 	case MsgVote:
 		return fmt.Sprintf("%d->%d Vote t=%d last=%d/%d", m.From, m.To, m.Term, m.LastLogIndex, m.LastLogTerm)
 	case MsgVoteResp:
@@ -152,6 +165,7 @@ const (
 	Follower StateType = iota
 	Candidate
 	Leader
+	PreCandidate
 )
 
 func (s StateType) String() string {
@@ -162,6 +176,8 @@ func (s StateType) String() string {
 		return "candidate"
 	case Leader:
 		return "leader"
+	case PreCandidate:
+		return "pre-candidate"
 	}
 	return "?"
 }

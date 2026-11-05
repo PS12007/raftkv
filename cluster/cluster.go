@@ -30,11 +30,11 @@ type Options struct {
 
 // Cluster is a set of in-process nodes.
 type Cluster struct {
-	opts  Options
-	mu    sync.Mutex
-	nodes map[raft.NodeID]*server.Node
-	cfgs  map[raft.NodeID]server.Config
-	next  raft.NodeID
+	opts   Options
+	mu     sync.Mutex
+	nodes  map[raft.NodeID]*server.Node
+	cfgs   map[raft.NodeID]server.Config
+	next   raft.NodeID
 	ownDir bool
 
 	// fault state, read by transport filters

@@ -70,6 +70,7 @@ type Config struct {
 	// MaxEntriesPerMsg caps AppendEntries batches. Small values leave
 	// followers partially caught up, which exercises log repair.
 	MaxEntriesPerMsg int
+	PreVote          bool
 
 	Logf func(format string, args ...any)
 }
@@ -305,7 +306,7 @@ func (n *Node) start() {
 	r, err := raft.New(raft.Config{
 		ID: n.id, Peers: n.peers, Storage: n.storage,
 		ElectionTicks: s.cfg.ElectionTicks, HeartbeatTicks: s.cfg.HeartbeatTicks,
-		MaxEntriesPerMsg: s.cfg.MaxEntriesPerMsg,
+		MaxEntriesPerMsg: s.cfg.MaxEntriesPerMsg, PreVote: s.cfg.PreVote,
 		Rand: rand.New(rand.NewSource(s.rng.Int63())), Logf: logf,
 	})
 	if err != nil {

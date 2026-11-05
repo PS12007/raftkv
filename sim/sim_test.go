@@ -25,7 +25,7 @@ var (
 func profile(seed int64) Config {
 	c := DefaultConfig(seed)
 	x := uint64(seed) * 0x9E3779B97F4A7C15
-	pick := func(n uint64) uint64 { v := x % n; x = x/n ^ (x >> 7) * 31; return v }
+	pick := func(n uint64) uint64 { v := x % n; x = x/n ^ (x>>7)*31; return v }
 	c.Nodes = []int{3, 5, 5, 7}[pick(4)]
 	c.Clients = int(3 + pick(5))
 	c.Keys = int(1 + pick(5))
@@ -41,6 +41,7 @@ func profile(seed int64) Config {
 	c.MaxLogBytes = []int{0, 1024, 4096, 64 << 10}[pick(4)]
 	c.FaultEvery = []Time{100 * Millisecond, 300 * Millisecond, 800 * Millisecond}[pick(3)]
 	c.MaxEntriesPerMsg = []int{1, 3, 64}[pick(3)]
+	c.PreVote = pick(2) == 0
 	if pick(4) == 0 {
 		// High churn: frequent crashes and partitions with fast elections,
 		// producing many terms and conflicting uncommitted log suffixes.
