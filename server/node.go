@@ -254,7 +254,14 @@ func (n *Node) publishStatus() {
 // Info returns the latest published status.
 func (n *Node) Info() *NodeStatus { return n.status.Load() }
 
-func (n *Node) serveStatus(w http.ResponseWriter, _ *http.Request) {
+// FreshInfo returns status computed on the event loop right now.
+func (n *Node) FreshInfo(ctx context.Context) *NodeStatus {
+	n.do(ctx, n.publishStatus)
+	return n.Info()
+}
+
+func (n *Node) serveStatus(w http.ResponseWriter, req *http.Request) {
+	n.FreshInfo(req.Context())
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	json.NewEncoder(w).Encode(n.Info())
@@ -343,7 +350,7 @@ func (n *Node) ChangeMembership(ctx context.Context, req *pb.MembershipRequest) 
 }
 
 // Status implements the KV service (JSON-encoded NodeStatus).
-func (n *Node) Status(context.Context, *pb.StatusRequest) (*pb.StatusReply, error) {
-	b, err := json.Marshal(n.Info())
+func (n *Node) Status(ctx context.Context, _ *pb.StatusRequest) (*pb.StatusReply, error) {
+	b, err := json.Marshal(n.FreshInfo(ctx))
 	return &pb.StatusReply{Json: b}, err
 }

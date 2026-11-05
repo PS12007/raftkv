@@ -74,8 +74,8 @@ type Entry struct {
 
 // Member is a cluster member.
 type Member struct {
-	ID   NodeID
-	Addr string
+	ID   NodeID `json:"id"`
+	Addr string `json:"addr"`
 }
 
 // Snapshot is a state machine snapshot plus the Raft metadata it covers.
