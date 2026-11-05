@@ -1,0 +1,105 @@
+syntax = "proto3";
+
+package raftkv.v1;
+
+option go_package = "github.com/ps12007/raftkv/proto/raftkvpb";
+
+// ---- Raft peer transport ----
+
+message Entry {
+  uint64 term = 1;
+  uint64 index = 2;
+  uint32 type = 3;
+  bytes data = 4;
+}
+
+message Member {
+  uint64 id = 1;
+  string addr = 2;
+}
+
+message Snapshot {
+  uint64 index = 1;
+  uint64 term = 2;
+  repeated Member members = 3;
+  bytes data = 4;
+}
+
+// RaftMessage mirrors raft.Message. Raft is message-based: responses are
+// separate messages travelling in the other direction.
+message RaftMessage {
+  uint32 type = 1;
+  uint64 from = 2;
+  uint64 to = 3;
+  uint64 term = 4;
+  uint64 last_log_index = 5;
+  uint64 last_log_term = 6;
+  bool granted = 7;
+  uint64 prev_log_index = 8;
+  uint64 prev_log_term = 9;
+  repeated Entry entries = 10;
+  uint64 leader_commit = 11;
+  bool success = 12;
+  uint64 match_index = 13;
+  uint64 conflict_index = 14;
+  uint64 conflict_term = 15;
+  Snapshot snapshot = 16;
+}
+
+message Empty {}
+
+service Raft {
+  // Stream carries a one-way flow of messages from one peer to another.
+  rpc Stream(stream RaftMessage) returns (Empty);
+}
+
+// ---- Client-facing KV API ----
+
+enum OpType {
+  OP_GET = 0;
+  OP_PUT = 1;
+  OP_APPEND = 2;
+  OP_DELETE = 3;
+}
+
+message KVRequest {
+  OpType op = 1;
+  string key = 2;
+  string value = 3;
+  uint64 client_id = 4;
+  uint64 seq = 5;
+}
+
+message KVReply {
+  // err is empty on success, otherwise one of "WrongLeader", "Timeout".
+  string err = 1;
+  string value = 2;
+  bool found = 3;
+  uint64 leader_hint = 4;
+  string leader_addr = 5;
+}
+
+message MembershipRequest {
+  // add=true adds (id, addr); add=false removes id.
+  bool add = 1;
+  uint64 id = 2;
+  string addr = 3;
+}
+
+message MembershipReply {
+  string err = 1;
+  uint64 leader_hint = 2;
+  string leader_addr = 3;
+}
+
+message StatusRequest {}
+
+message StatusReply {
+  bytes json = 1;
+}
+
+service KV {
+  rpc Do(KVRequest) returns (KVReply);
+  rpc ChangeMembership(MembershipRequest) returns (MembershipReply);
+  rpc Status(StatusRequest) returns (StatusReply);
+}
