@@ -354,7 +354,7 @@ func (n *Node) Do(ctx context.Context, req *pb.KVRequest) (*pb.KVReply, error) {
 func (n *Node) ChangeMembership(ctx context.Context, req *pb.MembershipRequest) (*pb.MembershipReply, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	m := raft.Member{ID: req.Id, Addr: req.Addr}
+	m := raft.Member{ID: req.Id, Addr: req.Addr, Learner: req.Add && !req.Voter}
 	r := n.submit(ctx, func(cb rsm.Callback) { n.core.SubmitConfChange(req.Add, m, cb) })
 	return &pb.MembershipReply{Err: errString(r.err), LeaderHint: r.leader, LeaderAddr: r.addr}, nil
 }

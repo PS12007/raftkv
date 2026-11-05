@@ -150,7 +150,7 @@ function renderNodes(st) {
       const rows = [['term', s.term], ['leader', s.leader || '–'], ['voted for', s.votedFor || '–'],
         ['commit', s.commit], ['applied', s.appliedSM], ['last index', `${s.lastIndex} (t${s.lastTerm})`],
         ['snapshot', s.snapIndex], ['log bytes', s.logBytes.toLocaleString()], ['keys', s.keys],
-        ['members', (s.members || []).map(m => m.id).join(', ') || '–']];
+        ['members', (s.members || []).map(m => m.learner ? `${m.id} (learner)` : `${m.id}`).join(', ') || '–']];
       for (const [k, v] of rows) kv.append(el('span', {}, k), el('span', {}, `${v}`));
       card.append(kv);
     }

@@ -95,6 +95,10 @@ type Entry struct {
 type Member struct {
 	ID   NodeID `json:"id"`
 	Addr string `json:"addr"`
+	// Learner members receive the log but do not vote or count towards
+	// quorums. New servers join as learners and the leader promotes them
+	// once they have caught up (dissertation §4.2.1).
+	Learner bool `json:"learner,omitempty"`
 }
 
 // Snapshot is a state machine snapshot plus the Raft metadata it covers.

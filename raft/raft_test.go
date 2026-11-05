@@ -362,3 +362,95 @@ func TestReadIndexNotReadyBeforeNoopCommits(t *testing.T) {
 		t.Fatalf("want ErrNotReady, got %v", err)
 	}
 }
+
+func TestLearnerCatchUpAndPromotion(t *testing.T) {
+	c := newCluster(t, 3)
+	for i := 0; i < 20; i++ {
+		c.propose(fmt.Sprint(i))
+	}
+	l := c.waitLeader()
+	// While node 4 is down, adding it as a learner must not change the
+	// quorum: commits keep flowing with the original three voters.
+	c.stores[4] = NewMemStorage()
+	c.start(4, nil)
+	c.crash(4)
+	if _, _, err := l.ProposeConfChange(true, Member{ID: 4, Addr: "n4", Learner: true}); err != nil {
+		t.Fatal(err)
+	}
+	c.flush(l.ID())
+	c.settle()
+	if l.quorum() != 2 {
+		t.Fatalf("learner counted in quorum: %d", l.quorum())
+	}
+	before := l.Commit()
+	c.propose("while-learner-down")
+	if l.Commit() <= before {
+		t.Fatal("commit blocked by a down learner")
+	}
+	// Bring it up: it catches up, never campaigns, then gets promoted.
+	delete(c.down, 4)
+	for i := 0; i < 100 && c.nodes[4].State() == Follower; i++ {
+		c.tick(1)
+		for _, m := range c.nodes[4].Members() {
+			if m.ID == 4 && !m.Learner {
+				goto promoted
+			}
+		}
+	}
+	t.Fatalf("learner never promoted; members %+v", l.Members())
+promoted:
+	if c.nodes[4].State() != Follower {
+		t.Fatal("learner campaigned")
+	}
+	c.tick(10)
+	if l.quorum() != 3 {
+		t.Fatalf("quorum after promotion: %d", l.quorum())
+	}
+	if got := normalData(c.applied[4]); len(got) != 21 {
+		t.Fatalf("promoted node applied %d entries", len(got))
+	}
+	// A bad change: promoting an existing voter.
+	if _, _, err := c.waitLeader().ProposeConfChange(true, Member{ID: 4}); err != ErrBadConfChange && err != ErrConfChangePending {
+		t.Fatalf("want ErrBadConfChange, got %v", err)
+	}
+}
+
+func TestLearnerNeverCampaigns(t *testing.T) {
+	s := NewMemStorage()
+	r, _ := New(Config{ID: 2, Peers: []Member{{ID: 1}, {ID: 2, Learner: true}}, Storage: s})
+	for i := 0; i < 200; i++ {
+		r.Tick()
+	}
+	if r.State() != Follower || r.Term() != 0 {
+		t.Fatalf("learner campaigned: state %v term %d", r.State(), r.Term())
+	}
+}
+
+// TestSelfRemovalCrashDoesNotDeadlock: a leader proposes its own removal,
+// the entry reaches nobody, and the leader restarts. Its log is now the
+// most up-to-date, so the other voter cannot win; the old leader must be
+// allowed to campaign (counting only the new config's votes), commit its
+// removal and step aside.
+func TestSelfRemovalCrashDoesNotDeadlock(t *testing.T) {
+	c := newCluster(t, 2)
+	c.propose("x")
+	l := c.waitLeader()
+	other := NodeID(3) - l.ID()
+	c.cut[other] = true
+	if _, _, err := l.ProposeConfChange(false, Member{ID: l.ID()}); err != nil {
+		t.Fatal(err)
+	}
+	c.flush(l.ID())
+	c.settle() // dropped: other never sees the removal
+	c.crash(l.ID())
+	delete(c.cut, other)
+	c.start(l.ID(), c.peers)
+	c.tick(200)
+	nl := c.leader()
+	if nl == nil || nl.ID() != other {
+		t.Fatalf("cluster deadlocked after self-removal crash (leader %v)", nl)
+	}
+	if ms := nl.Members(); len(ms) != 1 || ms[0].ID != other {
+		t.Fatalf("removal not committed: %+v", ms)
+	}
+}

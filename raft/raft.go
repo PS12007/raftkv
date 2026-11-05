@@ -248,7 +248,25 @@ func (r *Raft) isMember(id NodeID) bool {
 	return false
 }
 
-func (r *Raft) quorum() int { return len(r.members)/2 + 1 }
+func (r *Raft) isVoter(id NodeID) bool {
+	for _, m := range r.members {
+		if m.ID == id {
+			return !m.Learner
+		}
+	}
+	return false
+}
+
+// quorum is a majority of the voting members.
+func (r *Raft) quorum() int {
+	n := 0
+	for _, m := range r.members {
+		if !m.Learner {
+			n++
+		}
+	}
+	return n/2 + 1
+}
 
 // recomputeConfig sets members from the latest config entry in the log,
 // falling back to the snapshot. A server always uses the latest
@@ -309,6 +327,11 @@ func EncodeMembers(ms []Member) []byte {
 		b = binary.AppendUvarint(b, m.ID)
 		b = binary.AppendUvarint(b, uint64(len(m.Addr)))
 		b = append(b, m.Addr...)
+		flags := byte(0)
+		if m.Learner {
+			flags = 1
+		}
+		b = append(b, flags)
 	}
 	return b
 }
@@ -323,8 +346,8 @@ func DecodeMembers(b []byte) []Member {
 		b = b[k:]
 		l, k := binary.Uvarint(b)
 		b = b[k:]
-		ms = append(ms, Member{ID: id, Addr: string(b[:l])})
-		b = b[l:]
+		ms = append(ms, Member{ID: id, Addr: string(b[:l]), Learner: b[l]&1 == 1})
+		b = b[l+1:]
 	}
 	return ms
 }
@@ -399,7 +422,7 @@ func (r *Raft) preCampaign() {
 func (r *Raft) countVotes() int {
 	n := 0
 	for _, m := range r.members {
-		if r.votes[m.ID] {
+		if !m.Learner && r.votes[m.ID] {
 			n++
 		}
 	}
@@ -423,8 +446,15 @@ func (r *Raft) becomeLeader() {
 
 // ---------- driving the state machine ----------
 
-// promotable reports whether this node may campaign.
-func (r *Raft) promotable() bool { return r.isMember(r.id) }
+// promotable reports whether this node may campaign. Voters may. So may a
+// server whose own removal is still uncommitted: it may hold the most
+// up-to-date log, and if it refused to campaign the remaining voters could
+// never elect anyone (a leader that crashed right after proposing its own
+// removal deadlocks the cluster otherwise). Its own vote does not count,
+// and it steps down as soon as the removal commits.
+func (r *Raft) promotable() bool {
+	return r.isVoter(r.id) || (!r.isMember(r.id) && r.configIndex > r.commit)
+}
 
 // Tick advances the logical clock by one tick.
 func (r *Raft) Tick() {
@@ -435,6 +465,7 @@ func (r *Raft) Tick() {
 		if r.heartbeatElapsed >= r.heartbeatTicks {
 			r.heartbeatElapsed = 0
 			r.broadcastAppend(true)
+			r.maybePromote()
 		}
 		if r.electionElapsed >= r.electionTicks {
 			r.electionElapsed = 0
@@ -455,6 +486,21 @@ func (r *Raft) Tick() {
 	}
 }
 
+// maybePromote turns a learner into a voter once it has caught up with the
+// leader's commit index, one change at a time.
+func (r *Raft) maybePromote() {
+	for _, m := range r.members {
+		pr := r.prs[m.ID]
+		if !m.Learner || pr == nil || pr.match < r.commit {
+			continue
+		}
+		if _, _, err := r.ProposeConfChange(true, Member{ID: m.ID, Addr: m.Addr}); err == nil {
+			r.debug("promoting learner %d (match %d)", m.ID, pr.match)
+		}
+		return
+	}
+}
+
 // checkQuorumNow makes a leader step down if it has not heard from a majority
 // within an election timeout. It lets clients find the real leader quickly
 // when an old leader is partitioned away.
@@ -462,7 +508,7 @@ func (r *Raft) checkQuorumNow() {
 	active := 0
 	for _, m := range r.members {
 		pr := r.prs[m.ID]
-		if m.ID == r.id || (pr != nil && pr.recentActive) {
+		if !m.Learner && (m.ID == r.id || (pr != nil && pr.recentActive)) {
 			active++
 		}
 		if pr != nil {
@@ -742,7 +788,7 @@ func (r *Raft) maybeCommit() {
 		}
 		cnt := 0
 		for _, mem := range r.members {
-			if pr := r.prs[mem.ID]; pr != nil && pr.match >= n {
+			if pr := r.prs[mem.ID]; !mem.Learner && pr != nil && pr.match >= n {
 				cnt++
 			}
 		}
@@ -752,7 +798,7 @@ func (r *Raft) maybeCommit() {
 		}
 	}
 	// A leader that has committed its own removal steps down (§4.2.2).
-	if r.configIndex <= r.commit && !r.isMember(r.id) {
+	if r.configIndex <= r.commit && !r.isVoter(r.id) {
 		r.debug("removed from cluster; stepping down")
 		r.becomeFollower(r.term, None)
 	}
@@ -825,7 +871,7 @@ func (r *Raft) ReadIndex(ctx uint64) error {
 func (r *Raft) countAcks(rr *readReq) int {
 	n := 0
 	for _, m := range r.members {
-		if rr.acks[m.ID] {
+		if !m.Learner && rr.acks[m.ID] {
 			n++
 		}
 	}
@@ -906,20 +952,31 @@ func (r *Raft) ProposeConfChange(add bool, m Member) (index, term uint64, err er
 		return 0, 0, ErrNotReady
 	}
 	var next []Member
-	found := false
+	found, voters := false, 0
 	for _, x := range r.members {
 		if x.ID == m.ID {
 			found = true
-			if !add {
-				continue
+			switch {
+			case !add:
+				continue // remove
+			case x.Learner && !m.Learner:
+				x.Learner = false // promote
+				if m.Addr != "" {
+					x.Addr = m.Addr
+				}
+			default:
+				return 0, 0, ErrBadConfChange // already a member
 			}
+		}
+		if !x.Learner {
+			voters++
 		}
 		next = append(next, x)
 	}
-	if add == found || m.ID == None || (!add && len(next) == 0) {
+	if m.ID == None || (!add && !found) || (!add && voters == 0) {
 		return 0, 0, ErrBadConfChange
 	}
-	if add {
+	if add && !found {
 		next = append(next, m)
 	}
 	idx := r.appendEntry(Entry{Type: EntryConfig, Data: EncodeMembers(next)})

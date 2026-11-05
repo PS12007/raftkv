@@ -633,7 +633,10 @@ func (s *Sim) addServer() {
 	s.nextNode++
 	n := s.newNode(id, nil)
 	n.start()
-	l.core.SubmitConfChange(true, raft.Member{ID: id}, func(_ []byte, err error) {
+	// Half the time join as a learner (auto-promoted once caught up),
+	// otherwise as a voter straight away.
+	learner := s.rng.Intn(2) == 0
+	l.core.SubmitConfChange(true, raft.Member{ID: id, Learner: learner}, func(_ []byte, err error) {
 		s.logf("add server %d: %v", id, err)
 	})
 	l.flush()
@@ -722,7 +725,7 @@ func (s *Sim) Run() Result {
 	deadline := s.now + s.cfg.QuietDuration
 	s.runUntil(deadline, func() bool { return !s.outstanding() })
 	if s.err == nil && s.outstanding() {
-		s.fail("liveness: client operations still pending %.1fs after the cluster was healed", float64(s.cfg.QuietDuration)/float64(Second))
+		s.fail("liveness: client operations still pending %.1fs after the cluster was healed\n%s", float64(s.cfg.QuietDuration)/float64(Second), s.describeNodes())
 	}
 	if s.err == nil {
 		s.checkConvergence()
@@ -733,6 +736,22 @@ func (s *Sim) Run() Result {
 		}
 	}
 	return Result{Seed: s.cfg.Seed, Err: s.err, History: s.ops, Trace: s.trace.Sum64(), Stats: s.Stats}
+}
+
+// describeNodes summarises every node, for liveness failure reports.
+func (s *Sim) describeNodes() string {
+	var b []byte
+	for _, id := range s.nodeIDs {
+		n := s.nodes[id]
+		if !n.up {
+			b = fmt.Appendf(b, "  node %d: down\n", id)
+			continue
+		}
+		st := n.core.R.Status()
+		b = fmt.Appendf(b, "  node %d: %s term=%d leader=%d vote=%d commit=%d last=%d/%d removed=%v members=%v\n",
+			id, st.State, st.Term, st.Leader, st.VotedFor, st.Commit, st.LastIndex, st.LastTerm, n.removed, st.Members)
+	}
+	return string(b)
 }
 
 // checkConvergence waits for every member to apply the leader's commit

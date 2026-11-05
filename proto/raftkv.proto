@@ -16,6 +16,7 @@ message Entry {
 message Member {
   uint64 id = 1;
   string addr = 2;
+  bool learner = 3;
 }
 
 message Snapshot {
@@ -85,10 +86,13 @@ message KVReply {
 }
 
 message MembershipRequest {
-  // add=true adds (id, addr); add=false removes id.
+  // add=true adds (id, addr); add=false removes id. New servers are added
+  // as learners and promoted to voters automatically once caught up, unless
+  // voter=true, which adds them as voters straight away.
   bool add = 1;
   uint64 id = 2;
   string addr = 3;
+  bool voter = 4;
 }
 
 message MembershipReply {

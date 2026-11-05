@@ -172,9 +172,17 @@ func (c *Clerk) Delete(ctx context.Context, key string) (bool, error) {
 	return r.Found, nil
 }
 
-// AddServer adds a server to the cluster (single-server change).
+// AddServer adds a server to the cluster as a learner. The leader promotes
+// it to a voter automatically once it has caught up, so adding a server
+// never makes the cluster wait for a node that is still downloading the
+// log.
 func (c *Clerk) AddServer(ctx context.Context, id uint64, addr string) error {
 	return c.changeMembership(ctx, &pb.MembershipRequest{Add: true, Id: id, Addr: addr})
+}
+
+// AddVoter adds a server directly as a voter (no learner phase).
+func (c *Clerk) AddVoter(ctx context.Context, id uint64, addr string) error {
+	return c.changeMembership(ctx, &pb.MembershipRequest{Add: true, Id: id, Addr: addr, Voter: true})
 }
 
 // RemoveServer removes a server from the cluster.

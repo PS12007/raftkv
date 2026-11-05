@@ -109,7 +109,8 @@ The same `raft`, `rsm` and `kv` code runs in two places:
   - Only one change can be in flight at a time.
   - A leader must commit an entry in its own term before proposing a change. This is Ongaro's fix for the single-server bug.
   - A leader that removes itself keeps leading until the change commits, then steps down.
-  - New servers join as voters immediately; there is no non-voting catch-up phase.
+  - New servers join as **learners**: they receive the log but neither vote nor count towards quorums. On each heartbeat, the leader promotes the first learner whose match index has reached the commit index (dissertation §4.2.1).
+  - A server whose own removal is still uncommitted may still campaign; it counts only the new config's votes. Without this, a leader that crashed right after proposing its own removal could deadlock the cluster. The simulator found exactly that (seed 602786); `TestSelfRemovalCrashDoesNotDeadlock` covers it now.
 - **Reads use ReadIndex** (dissertation §6.4):
   - The leader records its commit index. It refuses until its own term's no-op has committed, and the read then falls back to the log.
   - It confirms leadership with an entry-less `MsgHeartbeat` round acknowledged by a majority. Every read waiting at that point shares the same round.
@@ -215,6 +216,5 @@ docs/        benchmarks
 
 - There are no lease-based reads: every read still costs one heartbeat round trip.
 - InstallSnapshot is not chunked.
-- New members join as voters without a catch-up phase. Adding a server to a small cluster can briefly slow commits.
 - The WAL is compacted only when a snapshot is taken.
 - The peer transport is plaintext gRPC with no authentication.

@@ -214,7 +214,7 @@ func toPB(m raft.Message) *pb.RaftMessage {
 	if s := m.Snapshot; s != nil {
 		ps := &pb.Snapshot{Index: s.Index, Term: s.Term, Data: s.Data}
 		for _, mm := range s.Members {
-			ps.Members = append(ps.Members, &pb.Member{Id: mm.ID, Addr: mm.Addr})
+			ps.Members = append(ps.Members, &pb.Member{Id: mm.ID, Addr: mm.Addr, Learner: mm.Learner})
 		}
 		out.Snapshot = ps
 	}
@@ -238,7 +238,7 @@ func fromPB(m *pb.RaftMessage) raft.Message {
 	if s := m.Snapshot; s != nil {
 		rs := &raft.Snapshot{Index: s.Index, Term: s.Term, Data: s.Data}
 		for _, mm := range s.Members {
-			rs.Members = append(rs.Members, raft.Member{ID: mm.Id, Addr: mm.Addr})
+			rs.Members = append(rs.Members, raft.Member{ID: mm.Id, Addr: mm.Addr, Learner: mm.Learner})
 		}
 		out.Snapshot = rs
 	}
